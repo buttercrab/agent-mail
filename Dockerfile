@@ -1,6 +1,15 @@
-FROM rust:1 AS builder
+FROM rust:1 AS chef
 
 WORKDIR /src
+RUN cargo install cargo-chef --locked
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /src/recipe.json recipe.json
+RUN cargo chef cook --release -p agent-mail-server --recipe-path recipe.json
 COPY . .
 RUN cargo build --release -p agent-mail-server
 

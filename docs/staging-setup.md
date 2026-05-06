@@ -69,7 +69,9 @@ Staging Deploy
 
 The workflow must:
 
+- build the release binary on the GitHub runner with Cargo/sccache caching
 - deploy the current repository revision
+- upload only the compiled binary to the staging host
 - restart the staging service
 - run `scripts/deployed_mcp_smoke.sh`
 - pass real HTTPS MCP/SSE checks against `STAGING_AGENT_MAIL_URL`
