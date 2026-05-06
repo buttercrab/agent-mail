@@ -9,9 +9,9 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
 COPY --from=planner /src/recipe.json recipe.json
-RUN cargo chef cook --release -p agent-mail-server --recipe-path recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release -p agent-mail-server
+RUN cargo build --release
 
 FROM debian:stable-slim
 

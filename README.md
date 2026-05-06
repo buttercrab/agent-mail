@@ -55,7 +55,7 @@ make test
 make real-test
 ```
 
-`make test` is the Rust compile/unit-test gate. It currently runs zero Rust unit tests.
+`make test` is the Rust compile/unit-test gate. Real behavior is covered by `make real-test`, and focused Rust unit tests cover low-level parsing helpers.
 
 `make real-test` starts or uses a real PostgreSQL database and runs HTTP plus MCP smoke tests against a real server process.
 

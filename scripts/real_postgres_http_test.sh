@@ -105,7 +105,7 @@ for _ in {1..100}; do
 done
 "$POSTGRES_BIN/createdb" -h 127.0.0.1 -p "$PG_PORT" -U postgres agent_mail_real_test
 
-cargo build --manifest-path "$ROOT/Cargo.toml" -p agent-mail-server >/dev/null
+cargo build --manifest-path "$ROOT/Cargo.toml" >/dev/null
 DATABASE_URL="postgres://postgres@127.0.0.1:$PG_PORT/agent_mail_real_test"
 RUST_LOG=warn "$ROOT/target/debug/agent-mail-server" \
   --database-url "$DATABASE_URL" \

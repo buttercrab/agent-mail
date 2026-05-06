@@ -42,7 +42,7 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 ### 2026-05-06 - Initial service import and OSS baseline
 
 - Done:
-  - Imported Cargo workspace, Rust server crate, and smoke scripts from `/Users/jaeyong/skills/skills/agent-mail`.
+  - Imported the Rust server crate and smoke scripts from `/Users/jaeyong/skills/skills/agent-mail`.
   - Added `README.md`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `.env.example`, `.gitignore`, `rust-toolchain.toml`, `rustfmt.toml`, and `clippy.toml`.
   - Added GitHub issue templates, PR template, CODEOWNERS, and Dependabot config.
   - Added Dockerfile and Docker Compose for local service/PostgreSQL startup.
@@ -500,3 +500,30 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Keep observing production and staging on the Nano/RDS shape.
   - Remove obsolete local notes or credentials only after confirming they are not still used by deploy workflows or recovery docs.
+
+### 2026-05-06 - Root crate refactor started
+
+- Done:
+  - Flattened the Rust service from `rust/agent-mail-server/src` into root-level `src`.
+  - Converted the root `Cargo.toml` from a virtual workspace manifest into the `agent-mail-server` package manifest.
+  - Updated local, CI, Docker, staging, production, and release build commands to target the root package directly.
+  - Added explicit config validation for required runtime values and non-empty allowed origins.
+  - Avoided bearer-token authorization string allocation.
+  - Preserved database errors during generated identity allocation instead of treating every error as an available identity.
+  - Canonicalized whitespace-trimmed identifiers before store lookups and writes.
+  - Replaced response serialization `unwrap` calls in MCP handling with typed internal errors.
+  - Added unit tests for MCP URI percent-encoding and resource URI parsing.
+- Evidence:
+  - `cargo metadata --no-deps --format-version 1` reports package `agent-mail-server` at root `Cargo.toml` with target `src/main.rs`.
+  - `cargo test` passed with 4 Rust unit tests.
+  - `cargo clippy --all-targets --all-features -- -D warnings` passed.
+  - `make real-test` passed:
+    - `scripts/real_postgres_http_test.sh`
+    - `scripts/real_postgres_mcp_test.sh`
+  - `bash -n scripts/*.sh && git diff --check && actionlint` passed.
+- Risk:
+  - Local Docker build could not run because the Docker daemon socket was unavailable at `/Users/jaeyong/.docker/run/docker.sock`.
+  - Docker build and deployed staging verification still need to run remotely before merging.
+- Next:
+  - Run the Docker build through CI.
+  - Merge through the protected PR flow only after remote checks pass.

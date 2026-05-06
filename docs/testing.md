@@ -6,11 +6,11 @@ Agent Mail does not use fake green checks. A validation command must exercise th
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 make test
 ```
 
-`make test` currently runs `cargo test --workspace`. At initial import, the Rust unit test count is zero, so this is a compile/test-harness gate, not behavioral coverage.
+`make test` currently runs `cargo test`. At initial import, the Rust unit test count was zero, so unit tests should not be treated as the only behavioral coverage.
 
 ## Real PostgreSQL Smoke Tests
 

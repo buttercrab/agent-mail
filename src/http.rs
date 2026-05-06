@@ -147,13 +147,14 @@ async fn mark_read(
 }
 
 pub(crate) fn authorize(state: &AppState, headers: &HeaderMap) -> Result<()> {
+    const BEARER: &str = "Bearer ";
     let Some(value) = headers.get(axum::http::header::AUTHORIZATION) else {
         return Err(AppError::Unauthorized);
     };
     let Ok(text) = value.to_str() else {
         return Err(AppError::Unauthorized);
     };
-    if text == format!("Bearer {}", state.token) {
+    if text.strip_prefix(BEARER) == Some(state.token.as_str()) {
         Ok(())
     } else {
         Err(AppError::Unauthorized)
