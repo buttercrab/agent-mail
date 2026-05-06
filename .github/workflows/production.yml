@@ -67,4 +67,6 @@ jobs:
           AGENT_MAIL_TOKEN: ${{ secrets.PROD_AGENT_MAIL_TOKEN }}
           AGENT_MAIL_URL: https://agent-mail.cc
           PUBLIC_IP: ${{ secrets.PROD_PUBLIC_IP }}
+          EXPECTED_AGENT_MAIL_HOST: agent-mail.cc
+          EXPECTED_ENVIRONMENT: production
         run: ./scripts/deployed_mcp_smoke.sh
