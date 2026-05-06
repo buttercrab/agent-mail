@@ -258,3 +258,34 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Fix staging deploy permissions so the SSH deploy user can build in the isolated staging source tree.
   - Re-run the manual staging workflow and record smoke evidence only if it passes.
+
+### 2026-05-06 - Staging deployed and validated
+
+- Done:
+  - Fixed staging deploy permissions through PR #8.
+  - Waited for main CI after PR #8 merge.
+  - Re-ran the manual `Staging Deploy` workflow.
+  - Confirmed staging and production services are both active on the host.
+  - Confirmed staging and production listen only on loopback private ports.
+- Evidence:
+  - PR #8 CI run `25420308195` passed.
+  - Main CI run `25420344470` passed after PR #8 merged.
+  - Manual staging workflow run `25420377702` passed in GitHub Actions.
+  - Staging smoke output:
+    - project `public-mcp-20260506064152-2397`
+    - receiver `bright-light-72d8c0f1`
+    - mail id `mail-20260506-064157-b3d8262a8067d1ed`
+  - `curl -fsS https://staging.agent-mail.cc/health` returned `{"environment":"staging","ok":true}`.
+  - `curl -fsS https://agent-mail.cc/health` returned `{"ok":true}`; production is still serving the previous deployed binary.
+  - Remote host check showed:
+    - `agent-mail-server.service` active
+    - `agent-mail-server-staging.service` active
+    - listeners on `127.0.0.1:8787` and `127.0.0.1:8788`
+  - Local TCP checks to `100.22.38.210:8787` and `100.22.38.210:8788` both failed to connect, confirming the raw service ports are not publicly reachable.
+- Risk:
+  - Production deploy workflow is still not proven from this repository.
+  - Docker build remains unverified because the local Docker daemon was unavailable earlier.
+- Next:
+  - Land this progress update through the protected branch flow.
+  - Configure production GitHub environment secrets/variables if not already present.
+  - Cut a test release or manually deploy a selected ref to production, then run real production smoke and record evidence.
