@@ -533,3 +533,23 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Decide whether to dispatch the production deploy workflow for commit `bd83abc`.
   - Keep CI warnings clean before GitHub's June 2026 Node.js 24 runner default change.
+
+### 2026-05-06 - CI split validated
+
+- Done:
+  - Measured recent CI behavior after the root-crate refactor.
+  - Confirmed staging deploy is already fast: run `25430136809` completed in about 47 seconds.
+  - Confirmed CI Rust checks and real PostgreSQL smoke tests finish in under a minute, while Docker build dominates the remaining wall-clock time.
+  - Split the CI Docker build into its own parallel job instead of running after Rust checks in the same job.
+  - Updated branch protection to require both `Rust checks and real smoke tests` and `Docker build`.
+- Evidence:
+  - Branch protection before this change required only `Rust checks and real smoke tests`.
+  - CI run `25430136759` reached Docker build after Rust checks and real smoke tests had already passed.
+  - PR #21 CI run `25430297083` showed the split working:
+    - `Rust checks and real smoke tests` passed in 48 seconds.
+    - `Docker build` passed in 2 minutes 29 seconds.
+- Risk:
+  - The split improves wall-clock time when both jobs can start immediately; if GitHub runner capacity queues one job, the benefit is reduced for that run.
+- Next:
+  - Merge PR #21 through the protected branch flow.
+  - Re-check main CI and staging after merge.
