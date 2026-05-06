@@ -41,6 +41,8 @@ cleanup() {
   if [[ $status -ne 0 ]]; then
     echo "postgres log: $PGLOG" >&2
     echo "server log: $SERVERLOG" >&2
+    [[ -f "$PGLOG" ]] && cat "$PGLOG" >&2
+    [[ -f "$SERVERLOG" ]] && cat "$SERVERLOG" >&2
   else
     rm -rf "$TMPDIR"
   fi
@@ -93,7 +95,7 @@ HTTP_PORT="$(free_port)"
 
 find_postgres_bin
 "$POSTGRES_BIN/initdb" -D "$PGDATA" -A trust -U postgres >/dev/null
-"$POSTGRES_BIN/pg_ctl" -D "$PGDATA" -o "-h 127.0.0.1 -p $PG_PORT" -l "$PGLOG" start >/dev/null
+"$POSTGRES_BIN/pg_ctl" -D "$PGDATA" -o "-h 127.0.0.1 -p $PG_PORT -k $TMPDIR" -l "$PGLOG" start >/dev/null
 POSTGRES_PID=1
 for _ in {1..100}; do
   if "$POSTGRES_BIN/pg_isready" -h 127.0.0.1 -p "$PG_PORT" -U postgres >/dev/null 2>&1; then

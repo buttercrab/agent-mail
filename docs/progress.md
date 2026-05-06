@@ -111,3 +111,20 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Make staging workflow manual-only until staging is actually configured.
   - Push that correction and check remote CI status.
+
+### 2026-05-06 - Remote CI smoke fix
+
+- Done:
+  - Investigated failed remote CI run `25419056497`.
+  - Identified failure in `make real-test` while starting temporary PostgreSQL on the GitHub Ubuntu runner.
+  - Updated smoke scripts to use a temp-directory Unix socket with `postgres -k`.
+  - Updated failure cleanup to print PostgreSQL and server logs.
+  - Re-ran local `make ci` after the script change.
+- Evidence:
+  - Failed GitHub log showed `pg_ctl: could not start server` in `Real PostgreSQL HTTP/MCP smoke tests`.
+  - Local `bash -n scripts/*.sh && make ci` passed after the change.
+- Risk:
+  - The remote CI fix still needs confirmation from a new GitHub Actions run.
+- Next:
+  - Push the smoke-script fix.
+  - Wait for the new remote CI run and inspect any real failure logs.
