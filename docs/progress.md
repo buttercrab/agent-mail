@@ -209,3 +209,27 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Land this progress update through the protected branch flow.
   - Continue with real staging setup after AWS and Cloudflare authentication are available.
+
+### 2026-05-06 - Staging isolation hardening
+
+- Done:
+  - Updated the staging workflow to require same-host staging isolation values before it can deploy.
+  - Staging deploy now rejects the production service name, production install root, production source path, production private port, and production URL.
+  - Added `AGENT_MAIL_ENVIRONMENT` to server config and `/health` so deployed smoke tests can prove they are hitting staging.
+  - Updated deployed MCP smoke to optionally require an expected URL host and environment.
+  - Updated deployed MCP smoke to check TCP reachability of the configured private service port instead of only checking whether `8787/health` returns `200`.
+- Evidence:
+  - `make ci` passed after the changes:
+    - `cargo fmt --all -- --check`
+    - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+    - `cargo test --workspace`, reporting zero Rust unit tests
+    - `scripts/real_postgres_http_test.sh`
+    - `scripts/real_postgres_mcp_test.sh`
+  - `actionlint` passed.
+  - `bash -n scripts/*.sh && git diff --check` passed.
+- Risk:
+  - These are repository/workflow hardening changes only; staging infrastructure still has to be provisioned and validated through the public edge.
+- Next:
+  - Land this hardening through a protected-branch PR.
+  - Provision same-host staging with `/opt/agent-mail-staging`, `agent-mail-server-staging.service`, `127.0.0.1:8788`, `AGENT_MAIL_ENVIRONMENT=staging`, and separate PostgreSQL credentials.
+  - Set the GitHub `staging` environment secrets/variables and run the manual `Staging Deploy` workflow.

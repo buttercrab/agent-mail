@@ -53,6 +53,7 @@ Open only SSH, HTTP, and HTTPS on the instance firewall. Do not expose port `878
 export AGENT_MAIL_DATABASE_URL='postgres://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require'
 export AGENT_MAIL_BIND='127.0.0.1:8787'
 export AGENT_MAIL_TOKEN='replace-with-random-token'
+export AGENT_MAIL_ENVIRONMENT='production'
 export AGENT_MAIL_URL='https://agent-mail.cc'
 export AGENT_MAIL_ALLOWED_ORIGINS='https://agent-mail.cc'
 ```

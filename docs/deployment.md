@@ -21,8 +21,12 @@ Required secrets:
 Required variables:
 
 - `STAGING_AGENT_MAIL_URL`, for example `https://staging.agent-mail.cc`
+- `STAGING_SERVICE=agent-mail-server-staging.service`
+- `STAGING_INSTALL_ROOT=/opt/agent-mail-staging`
+- `STAGING_REMOTE_SOURCE=/tmp/agent-mail-staging-src`
+- `STAGING_PRIVATE_PORT=8788`
 
-The staging workflow deploys over SSH, restarts `agent-mail-server.service`, and runs `scripts/deployed_mcp_smoke.sh` against the staging public URL.
+The staging workflow deploys over SSH to `/opt/agent-mail-staging`, restarts `agent-mail-server-staging.service`, and runs `scripts/deployed_mcp_smoke.sh` against `https://staging.agent-mail.cc`. The workflow intentionally rejects production paths, the production service name, and the production URL.
 
 The workflow is manual until real staging infrastructure and GitHub environment secrets are configured. After the first successful manual staging run, it can be changed to run automatically on pushes to `main`.
 
@@ -49,12 +53,12 @@ Production smoke targets `https://agent-mail.cc`.
 The server host must provide:
 
 - Rust toolchain for current source-build deploys
-- systemd service named `agent-mail-server.service`
-- `/opt/agent-mail/src`
-- `/opt/agent-mail/bin`
+- a systemd service per environment
+- an isolated install root per environment
 - `AGENT_MAIL_DATABASE_URL`
 - `AGENT_MAIL_BIND`
 - `AGENT_MAIL_TOKEN`
+- `AGENT_MAIL_ENVIRONMENT`
 - `AGENT_MAIL_ALLOWED_ORIGINS`
 
 `AGENT_MAIL_TOKEN` is required. The server must not run unauthenticated.
@@ -66,12 +70,14 @@ AGENT_MAIL_ALLOWED_ORIGINS=https://staging.agent-mail.cc
 AGENT_MAIL_ALLOWED_ORIGINS=https://agent-mail.cc
 ```
 
+Set `AGENT_MAIL_ENVIRONMENT=staging` for staging and `AGENT_MAIL_ENVIRONMENT=production` for production. `/health` exposes this non-secret value so deployed smoke tests can reject the wrong environment.
+
 ## Public Edge Requirements
 
 The `/mcp` route must support long-lived SSE:
 
 - `proxy_buffering off`
 - long read/send timeouts
-- no public exposure of port `8787`
+- no public exposure of the private service port, for example `8787` in production or `8788` in same-host staging
 
 See [Lightsail notes](lightsail.md) for the current production shape.

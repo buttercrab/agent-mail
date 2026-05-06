@@ -3,7 +3,10 @@ set -euo pipefail
 
 BASE_URL="${AGENT_MAIL_URL:?AGENT_MAIL_URL is required}"
 TOKEN="${AGENT_MAIL_TOKEN:?AGENT_MAIL_TOKEN is required}"
-PUBLIC_IP="${PUBLIC_IP:?PUBLIC_IP is required to verify private 8787 is not exposed}"
+PUBLIC_IP="${PUBLIC_IP:?PUBLIC_IP is required to verify the private service port is not exposed}"
+PRIVATE_PORT="${PRIVATE_PORT:-8787}"
+EXPECTED_AGENT_MAIL_HOST="${EXPECTED_AGENT_MAIL_HOST:-}"
+EXPECTED_ENVIRONMENT="${EXPECTED_ENVIRONMENT:-}"
 TMPDIR="$(mktemp -d /tmp/agent-mail-public-mcp-XXXXXX)"
 PROJECT="public-mcp-$(date +%Y%m%d%H%M%S)-$$"
 REVIEWER_ROLE="public-smoke-reviewer-$$"
@@ -31,6 +34,14 @@ expr = sys.argv[1]
 if not eval(expr, {"json": json}, {"data": data}):
     raise SystemExit(f"assertion failed: {expr}\n{json.dumps(data, indent=2)}")' "$1"
 }
+
+if [[ -n "$EXPECTED_AGENT_MAIL_HOST" ]]; then
+  actual_host="$(python3 -c 'from urllib.parse import urlparse; import sys; print(urlparse(sys.argv[1]).hostname or "")' "$BASE_URL")"
+  if [[ "$actual_host" != "$EXPECTED_AGENT_MAIL_HOST" ]]; then
+    echo "expected AGENT_MAIL_URL host $EXPECTED_AGENT_MAIL_HOST, got $actual_host" >&2
+    exit 1
+  fi
+fi
 
 mcp_request() {
   python3 -c 'import json, sys
@@ -162,7 +173,11 @@ tool_call() {
 print(json.dumps({"jsonrpc":"2.0","id":int(sys.argv[1]),"method":"tools/call","params":{"name":sys.argv[2],"arguments":json.loads(sys.argv[3])}}))' "$id" "$name" "$args")"
 }
 
-curl -fsS "$BASE_URL/health" | assert_json 'data["ok"] is True'
+health_json="$(curl -fsS "$BASE_URL/health")"
+printf '%s' "$health_json" | assert_json 'data["ok"] is True'
+if [[ -n "$EXPECTED_ENVIRONMENT" ]]; then
+  printf '%s' "$health_json" | assert_json 'data.get("environment") == "'"$EXPECTED_ENVIRONMENT"'"'
+fi
 
 unauth_status="$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$BASE_URL/mcp")"
 [[ "$unauth_status" == "401" ]]
@@ -212,8 +227,21 @@ tool_call "$receiver_session" 10 agent_mail_mark_read "$(python3 -c 'import json
 wait_for_sse_uri "$message_uri"
 mcp_post "$receiver_session" "$(mcp_request resources/read 11 "$(python3 -c 'import json, sys; print(json.dumps({"uri":sys.argv[1]}))' "$inbox_uri")")" | assert_json 'json.loads(data["result"]["contents"][0]["text"])["unread_count"] == 0'
 
-origin_status="$(curl -m 3 -sS -o /dev/null -w "%{http_code}" "http://$PUBLIC_IP:8787/health" 2>/dev/null || true)"
-[[ "$origin_status" != "200" ]]
+if python3 - "$PUBLIC_IP" "$PRIVATE_PORT" <<'PY'
+import socket
+import sys
+
+host, port = sys.argv[1], int(sys.argv[2])
+try:
+    with socket.create_connection((host, port), timeout=3):
+        raise SystemExit(0)
+except OSError:
+    raise SystemExit(1)
+PY
+then
+  echo "raw private service port is publicly reachable: $PUBLIC_IP:$PRIVATE_PORT" >&2
+  exit 1
+fi
 
 echo "deployed mcp smoke passed"
 echo "project=$PROJECT"

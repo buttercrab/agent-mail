@@ -12,6 +12,9 @@ pub struct Config {
     #[arg(long, env = "AGENT_MAIL_TOKEN")]
     pub token: String,
 
+    #[arg(long, env = "AGENT_MAIL_ENVIRONMENT", default_value = "production")]
+    pub environment: String,
+
     #[arg(
         long,
         env = "AGENT_MAIL_ALLOWED_ORIGINS",

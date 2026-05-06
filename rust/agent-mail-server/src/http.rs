@@ -21,6 +21,7 @@ use crate::{
 pub struct AppState {
     pub store: Store,
     pub token: String,
+    pub environment: String,
     pub allowed_origins: Vec<String>,
     pub mcp: McpHub,
 }
@@ -48,8 +49,11 @@ pub fn router(state: AppState) -> Router {
         .with_state(Arc::new(state))
 }
 
-async fn health() -> impl IntoResponse {
-    (StatusCode::OK, Json(json!({ "ok": true })))
+async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(json!({ "ok": true, "environment": state.environment })),
+    )
 }
 
 async fn start_participant(
