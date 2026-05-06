@@ -26,15 +26,15 @@ Required variables:
 - `STAGING_REMOTE_SOURCE=/tmp/agent-mail-staging-src`
 - `STAGING_PRIVATE_PORT=8788`
 
-The staging workflow deploys over SSH to `/opt/agent-mail-staging`, restarts `agent-mail-server-staging.service`, and runs `scripts/deployed_mcp_smoke.sh` against `https://staging.agent-mail.cc`. The workflow intentionally rejects production paths, the production service name, and the production URL.
+The staging workflow runs automatically on pushes to `main` and can also be run manually. It builds the release binary on the GitHub runner with Cargo/sccache caching, uploads only the binary over SSH, installs it under `/opt/agent-mail-staging`, restarts `agent-mail-server-staging.service`, and runs `scripts/deployed_mcp_smoke.sh` against `https://staging.agent-mail.cc`. The workflow intentionally rejects production paths, the production service name, and the production URL.
 
-The workflow is manual until real staging infrastructure and GitHub environment secrets are configured. After the first successful manual staging run, it can be changed to run automatically on pushes to `main`.
+`main` is the staging candidate branch. Production is promoted manually from a selected ref or tag after staging is green.
 
 See [Staging setup](staging-setup.md) for the required checklist.
 
 ### Production
 
-Production deploys are manual.
+Production deploys are manual. The workflow checks out the requested ref, builds the release binary on the GitHub runner with Cargo/sccache caching, uploads only the binary over SSH, restarts `agent-mail-server.service`, and runs public MCP/SSE smoke against production.
 
 Required GitHub environment: `production`
 
@@ -52,7 +52,7 @@ Production smoke targets `https://agent-mail.cc` and requires `/health` to repor
 
 The server host must provide:
 
-- Rust toolchain for current source-build deploys
+- Linux `x86_64` runtime, matching the current GitHub-hosted runner binary build
 - a systemd service per environment
 - an isolated install root per environment
 - `AGENT_MAIL_DATABASE_URL`

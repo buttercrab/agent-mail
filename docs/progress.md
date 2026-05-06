@@ -363,3 +363,25 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Local Docker remains unavailable on this workstation, but Docker packaging is now verified on GitHub-hosted runners.
 - Next:
   - Keep Docker build in the required CI check.
+
+### 2026-05-06 - Nano/RDS migration started
+
+- Done:
+  - Set the active goal to migrate toward the cheap Lightsail Nano + private RDS PostgreSQL architecture.
+  - Chose the deploy strategy:
+    - PRs run CI only with real temporary PostgreSQL smoke tests.
+    - pushes to `main` deploy automatically to staging.
+    - production deploy remains manual from a selected ref or tag.
+  - Started workflow changes to make Nano viable:
+    - CI, release, staging deploy, and production deploy use Cargo cache plus `sccache`.
+    - Docker builds use GitHub Actions cache via BuildKit.
+    - staging and production deploys build release binaries on GitHub-hosted runners.
+    - staging and production hosts receive only the compiled `agent-mail-server` binary instead of building Rust on the instance.
+- Evidence:
+  - `aws sts get-caller-identity` failed with: `Your session has expired. Please reauthenticate using 'aws login'.`
+  - Current production host architecture is `x86_64`, matching GitHub's Linux runner binary output.
+- Risk:
+  - RDS creation, VPC peering, RDS security groups, DB dump/restore, and Lightsail Nano resize cannot proceed until AWS auth is refreshed.
+- Next:
+  - Land and verify the workflow/cache/deploy changes first.
+  - After AWS auth is refreshed, provision RDS PostgreSQL `db.t4g.micro`, create separate prod/staging DBs and users, migrate data, validate staging, then promote production.
