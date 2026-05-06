@@ -472,11 +472,31 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
     - Production deploy run `25425410316` showed `sccache` `206 hits`, `0 misses`, `0 errors`.
 - Risk:
   - This is a cheap single-instance app host plus single-AZ RDS shape, not high availability.
-  - The old small instance and old Lightsail managed DB are still retained for rollback and still cost money until retired.
-  - RDS security group still includes the old small instance private IP for rollback. Remove it after the rollback window.
+  - At cutover time, the old small instance and old Lightsail managed DB were retained for rollback and still cost money until retired.
+  - At cutover time, the RDS security group still included the old small instance private IP for rollback.
   - GitHub still emits a Node.js 20 deprecation warning for `mozilla-actions/sccache-action@v0.0.9`.
 - Next:
   - Observe production and staging on Nano.
-  - After the rollback window, remove `172.26.8.117/32` from the RDS security group.
-  - Stop or delete the old small instance and old Lightsail managed database only after rollback is no longer needed.
+  - Retire the old small instance, old Lightsail managed database, and old RDS security group ingress after the rollback window.
   - Land this progress update through the protected branch flow.
+
+### 2026-05-06 - Legacy Lightsail resources removed
+
+- Done:
+  - Deleted legacy Lightsail app instance `agent-mail-20260504052845-web`.
+  - Deleted legacy Lightsail managed PostgreSQL database `agent-mail-20260504052845-db` with `--skip-final-snapshot`.
+  - Deleted legacy Lightsail managed DB snapshot `agent-mail-prod-pre-rds-20260506084541`.
+  - Removed old app host private IP `172.26.8.117/32` from RDS security group `sg-0782b8f8e7f5509b6`.
+- Evidence:
+  - `GET /health` still returned `{"environment":"production","ok":true}` for `https://agent-mail.cc`.
+  - `GET /health` still returned `{"environment":"staging","ok":true}` for `https://staging.agent-mail.cc`.
+  - `aws lightsail get-instance --instance-name agent-mail-20260504052845-web` returned `NotFoundException`.
+  - `aws lightsail get-relational-database --relational-database-name agent-mail-20260504052845-db` returned `NotFoundException`.
+  - Legacy Lightsail DB snapshot query returned `[]`.
+  - RDS security group ingress now allows only `172.26.1.42/32` on `tcp/5432`.
+- Risk:
+  - Host-level rollback to the old Lightsail small instance is no longer available.
+  - The retained rollback anchor is the current RDS snapshot `agent-mail-rds-post-prod-cutover-20260506084828` plus RDS automated backups.
+- Next:
+  - Keep observing production and staging on the Nano/RDS shape.
+  - Remove obsolete local notes or credentials only after confirming they are not still used by deploy workflows or recovery docs.
