@@ -501,7 +501,7 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Keep observing production and staging on the Nano/RDS shape.
   - Remove obsolete local notes or credentials only after confirming they are not still used by deploy workflows or recovery docs.
 
-### 2026-05-06 - Root crate refactor started
+### 2026-05-06 - Root crate refactor landed
 
 - Done:
   - Flattened the Rust service from `rust/agent-mail-server/src` into root-level `src`.
@@ -521,9 +521,15 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
     - `scripts/real_postgres_http_test.sh`
     - `scripts/real_postgres_mcp_test.sh`
   - `bash -n scripts/*.sh && git diff --check && actionlint` passed.
+  - PR #19 merged into `main` as commit `bd83abc`.
+  - PR #19 CI run `25429333285` passed, including Docker build.
+  - Post-merge `main` CI run `25429620444` passed, including Docker build.
+  - Post-merge staging deploy run `25429620441` passed and verified the public MCP edge.
+  - Public staging health returned `{"environment":"staging","ok":true}` after deploy.
+  - Public production health still returned `{"environment":"production","ok":true}`.
 - Risk:
-  - Local Docker build could not run because the Docker daemon socket was unavailable at `/Users/jaeyong/.docker/run/docker.sock`.
-  - Docker build and deployed staging verification still need to run remotely before merging.
+  - Local Docker build still cannot run until a Docker daemon is available on this machine, but remote CI covered the Docker build.
+  - Production has not been redeployed with the root-crate refactor; `main` currently represents staging.
 - Next:
-  - Run the Docker build through CI.
-  - Merge through the protected PR flow only after remote checks pass.
+  - Decide whether to dispatch the production deploy workflow for commit `bd83abc`.
+  - Keep CI warnings clean before GitHub's June 2026 Node.js 24 runner default change.
