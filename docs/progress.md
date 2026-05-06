@@ -128,3 +128,25 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Push the smoke-script fix.
   - Wait for the new remote CI run and inspect any real failure logs.
+
+### 2026-05-06 - Remote CI green
+
+- Done:
+  - Pushed smoke-script fix commit `4c4817f`.
+  - Waited for the new GitHub Actions `CI` run on `main`.
+- Evidence:
+  - GitHub Actions run `25419133961` completed successfully.
+  - The successful job included:
+    - Install PostgreSQL binaries
+    - Check formatting
+    - Clippy
+    - Rust tests
+    - Real PostgreSQL HTTP/MCP smoke tests
+- Risk:
+  - Staging deploy is still not configured.
+  - Docker build is still unverified because the local Docker daemon is unavailable.
+  - Dependabot opened dependency PRs whose initial checks failed before the CI smoke-script fix reached their branches.
+- Next:
+  - Update Dependabot PR branches against current `main`.
+  - Merge only PRs whose checks pass.
+  - Configure real staging infrastructure/secrets.
