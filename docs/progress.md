@@ -349,3 +349,17 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Docker build is still unverified because the local Docker daemon was unavailable earlier.
 - Next:
   - Add Docker build validation to CI so packaging is tested on GitHub-hosted runners.
+
+### 2026-05-06 - Docker build validated in CI
+
+- Done:
+  - Added `docker build --pull --tag agent-mail-server:ci .` to CI through PR #13.
+  - Added `AGENT_MAIL_ENVIRONMENT=development` to `docker-compose.yml`.
+  - Verified CI with Docker packaging enabled.
+- Evidence:
+  - PR #13 CI run `25421592122` passed and included the Docker build step.
+  - Main CI run `25421705258` passed after PR #13 merged and included the Docker build step.
+- Risk:
+  - Local Docker remains unavailable on this workstation, but Docker packaging is now verified on GitHub-hosted runners.
+- Next:
+  - Keep Docker build in the required CI check.
