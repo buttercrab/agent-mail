@@ -386,3 +386,29 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Land and verify the workflow/cache/deploy changes first.
   - After AWS auth is refreshed, provision RDS PostgreSQL `db.t4g.micro`, create separate prod/staging DBs and users, migrate data, validate staging, then promote production.
+
+### 2026-05-06 - Cached runner deploys validated
+
+- Done:
+  - Landed PR #15 with cached GitHub-runner builds and binary-only host deploys.
+  - Added `cargo-chef` to the Dockerfile so Docker dependency compilation can be cached separately from application source.
+  - Enabled automatic staging deploy on pushes to `main`.
+- Evidence:
+  - PR #15 CI run `25423512183` passed after adding `cargo-chef`; the run included:
+    - `sccache`
+    - Cargo cache
+    - real PostgreSQL HTTP/MCP smoke
+    - Docker BuildKit build with `cargo-chef`
+  - Main CI run `25423761896` passed after PR #15 merged.
+  - Main staging deploy run `25423761898` passed after PR #15 merged.
+  - Staging deploy used GitHub-runner release build plus binary upload, then passed deployed MCP smoke:
+    - project `public-mcp-20260506080946-8928`
+    - receiver `silver-ridge-8ebf4ff4`
+    - mail id `mail-20260506-080950-2bdbe49b1f5a5d41`
+  - Staging `sccache` stats showed a cold cache on first run: `0 hits`, `206 misses`, `0 errors`; the cache was written for later runs.
+- Risk:
+  - GitHub emitted a Node.js 20 deprecation warning for `mozilla-actions/sccache-action@v0.0.9`, `docker/setup-buildx-action@v3`, and `docker/build-push-action@v6`. The warning did not fail CI, but it should be monitored or addressed before GitHub removes Node 20 support.
+  - AWS auth is still expired, so RDS/Nano provisioning remains blocked.
+- Next:
+  - Refresh AWS auth.
+  - Provision private RDS PostgreSQL and migrate staging first.
