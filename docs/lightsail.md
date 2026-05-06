@@ -7,7 +7,7 @@ Use `us-west-2` for the Lightsail deployment.
 ## Runtime
 
 - Server: Rust `agent-mail-server`
-- Database: Lightsail managed PostgreSQL
+- Database: private AWS RDS PostgreSQL
 - Public endpoint: `https://agent-mail.cc`
 - Interfaces:
   - HTTPS JSON API with bearer-token authentication
@@ -16,19 +16,23 @@ Use `us-west-2` for the Lightsail deployment.
 ## Lightsail Shape
 
 ```text
-Lightsail instance, us-west-2
-  agent-mail-server
+Lightsail Nano instance, us-west-2
+  agent-mail-server on 127.0.0.1:8787
+  agent-mail-server-staging on 127.0.0.1:8788
   nginx for HTTPS and reverse proxy
-  systemd unit
+  systemd units
 
-Lightsail managed PostgreSQL, us-west-2
-  Agent Mail schema
-  managed snapshots and restore
+RDS PostgreSQL, us-west-2
+  private, not publicly accessible
+  separate production and staging databases/users
+  encrypted storage, automated backups, manual snapshots
 ```
 
-Cloudflare proxies `agent-mail.cc` to the Lightsail static IP. nginx terminates the Cloudflare Origin CA certificate on `443`, redirects `80` to HTTPS, and proxies to `agent-mail-server` on `127.0.0.1:8787`.
+Cloudflare proxies `agent-mail.cc` and `staging.agent-mail.cc` to the Lightsail static IPv4. nginx terminates Cloudflare Origin CA certificates on `443`, redirects `80` to HTTPS, proxies production to `127.0.0.1:8787`, and proxies staging to `127.0.0.1:8788`.
 
-The `/mcp` nginx location must disable proxy buffering and use long read/send timeouts so the MCP SSE `GET /mcp` stream can deliver `notifications/resources/updated` promptly:
+The `/mcp` nginx location must disable proxy buffering and use long read/send timeouts so the MCP SSE `GET /mcp` stream can deliver `notifications/resources/updated` promptly.
+
+Production proxies to `127.0.0.1:8787`:
 
 ```nginx
 location /mcp {
@@ -45,7 +49,28 @@ location /mcp {
 }
 ```
 
-Open only SSH, HTTP, and HTTPS on the instance firewall. Do not expose port `8787` or PostgreSQL publicly unless a temporary administrative maintenance window requires it.
+Staging must use the staging service port, not the production port:
+
+```nginx
+location /mcp {
+    proxy_pass http://127.0.0.1:8788;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Open only SSH, HTTP, and HTTPS on the instance firewall. Do not expose ports `8787`, `8788`, or PostgreSQL publicly unless a temporary administrative maintenance window requires it.
+
+The RDS security group must allow `tcp/5432` only from the active Lightsail app host private IP. Keep the previous app host private IP allowed during the rollback window, then remove it after the old host is retired.
+
+Do not rely on a snapshot downsize from a larger Lightsail bundle to Nano. The current production approach is a fresh Nano instance configured with the existing binary-only deploy shape, then static IPv4 reassignment after direct-origin health and RDS checks pass.
 
 ## Server Environment
 
