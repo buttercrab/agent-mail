@@ -190,3 +190,22 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Reauthenticate AWS and Cloudflare, or provide staging host/DNS/token details.
   - Configure GitHub `staging` environment secrets.
   - Run the manual `Staging Deploy` workflow and record real evidence.
+
+### 2026-05-06 - Repository protection
+
+- Done:
+  - Enabled branch protection for `main`.
+  - Added repository description and topics.
+- Evidence:
+  - Branch protection now requires status check `Rust checks and real smoke tests`.
+  - Required status checks are strict, so branches must be up to date.
+  - Admin enforcement is enabled.
+  - Linear history is required.
+  - Force pushes and branch deletion are disabled.
+  - Conversation resolution is required.
+  - Repository topics are `agents`, `mcp`, `postgres`, and `rust`.
+- Risk:
+  - Branch protection does not replace staging validation; staging remains blocked by missing provider authentication or staging infrastructure details.
+- Next:
+  - Land this progress update through the protected branch flow.
+  - Continue with real staging setup after AWS and Cloudflare authentication are available.
