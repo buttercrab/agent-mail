@@ -563,11 +563,13 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Kept `Swatinem/rust-cache@v2` and Docker Buildx layer caching.
   - Replaced Docker setup/build actions in CI with a shell-based `docker buildx` invocation to test removing the remaining Docker action Node.js 20 warnings.
   - Switched the shell Docker build to `--output type=cacheonly` so CI validates the image build and exports cache without loading an unused local image.
+  - Found newer Docker actions and switched CI Docker back to actions using `docker/setup-buildx-action@v4` and `docker/build-push-action@v7`.
 - Evidence:
   - Main CI run `25430765986` passed with split jobs, but still warned about `mozilla-actions/sccache-action@v0.0.9`.
   - The same run completed `Rust checks and real smoke tests` in 45 seconds; removing sccache should be measured against that baseline.
   - PR #22 first test run `25460435872` passed with Rust checks in 51 seconds and Docker in 2 minutes 24 seconds, but still warned for `docker/build-push-action@v6` and `docker/setup-buildx-action@v3`.
   - PR #22 shell Buildx run `25460604176` passed with Rust checks in 45 seconds and Docker in 2 minutes 49 seconds, with the Docker action Node.js 20 warning removed.
+  - PR #22 cache-only shell Buildx run `25460812572` passed with Rust checks in 46 seconds and Docker in 2 minutes 41 seconds, but remained slower than the Docker action baseline.
 - Risk:
   - Release builds may become slower if Cargo registry/target caching alone is less effective than sccache for this project.
   - The change should be accepted only if PR CI and staging deploy remain fast enough and warning output improves.
