@@ -42,3 +42,6 @@ jobs:
 
       - name: Real PostgreSQL HTTP/MCP smoke tests
         run: make real-test
+
+      - name: Docker build
+        run: docker build --pull --tag agent-mail-server:ci .

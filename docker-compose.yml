@@ -22,6 +22,7 @@ services:
       AGENT_MAIL_DATABASE_URL: postgres://agent_mail:agent_mail@postgres:5432/agent_mail?sslmode=disable
       AGENT_MAIL_BIND: 0.0.0.0:8787
       AGENT_MAIL_TOKEN: local-dev-token
+      AGENT_MAIL_ENVIRONMENT: development
       AGENT_MAIL_ALLOWED_ORIGINS: http://localhost:8787,http://127.0.0.1:8787
     ports:
       - "8787:8787"

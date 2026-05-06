@@ -330,3 +330,22 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Land this progress update through the protected branch flow.
   - Decide whether to require Docker build in CI or leave Docker as best-effort local packaging.
   - Cut the first tagged release if the current deployed commit is accepted as the initial release candidate.
+
+### 2026-05-06 - Release validated
+
+- Done:
+  - Prepared `CHANGELOG.md` for `v0.1.0` through PR #12.
+  - Tagged `v0.1.0` after main CI passed.
+  - Verified the GitHub Release workflow.
+- Evidence:
+  - PR #12 CI run `25421383357` passed.
+  - Main CI run `25421423387` passed after PR #12 merged.
+  - Release workflow run `25421465058` passed.
+  - GitHub release `v0.1.0` exists at `https://github.com/buttercrab/agent-mail/releases/tag/v0.1.0`.
+  - Release assets:
+    - `agent-mail-server-linux-x86_64`
+    - `SHA256SUMS`
+- Risk:
+  - Docker build is still unverified because the local Docker daemon was unavailable earlier.
+- Next:
+  - Add Docker build validation to CI so packaging is tested on GitHub-hosted runners.
