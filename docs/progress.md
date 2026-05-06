@@ -412,3 +412,71 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Refresh AWS auth.
   - Provision private RDS PostgreSQL and migrate staging first.
+
+### 2026-05-06 - Private RDS and Nano migration completed
+
+- Done:
+  - Provisioned private AWS RDS PostgreSQL `agent-mail-rds-20260506` in `us-west-2`.
+  - Enabled Lightsail VPC peering to the default VPC.
+  - Created RDS security group `sg-0782b8f8e7f5509b6` for `tcp/5432`.
+  - Created separate RDS databases and users for production and staging.
+  - Migrated staging from the old Lightsail managed PostgreSQL database to RDS first, then verified staging through the real GitHub staging workflow.
+  - Migrated production to RDS during a short service freeze, with a final logical dump and exact row-count reconciliation.
+  - Created rollback anchors:
+    - Lightsail managed DB snapshot `agent-mail-prod-pre-rds-20260506084541`.
+    - RDS snapshot `agent-mail-rds-post-prod-cutover-20260506084828`.
+  - Created fresh Lightsail Nano instance `agent-mail-20260506-nano` instead of attempting an invalid snapshot downsize.
+  - Reassigned static IPv4 `100.22.38.210` to the Nano after direct-origin health checks passed.
+  - Left the old small instance `agent-mail-20260504052845-web` running with both app services stopped for host-level rollback.
+- Evidence:
+  - RDS:
+    - instance `agent-mail-rds-20260506`
+    - engine PostgreSQL `18.3`
+    - `PubliclyAccessible=false`
+    - encrypted storage enabled
+    - deletion protection enabled
+    - endpoint `agent-mail-rds-20260506.ch8s8kymek34.us-west-2.rds.amazonaws.com`
+  - RDS security group:
+    - `172.26.8.117/32` kept temporarily for old-host rollback
+    - `172.26.1.42/32` added for active Nano host
+  - Staging RDS migration:
+    - source frozen counts before restore: `messages=3`, `participants=6`, `projects=3`, `receipts=3`
+    - RDS restored counts: `messages=3`, `participants=6`, `projects=3`, `receipts=3`
+    - GitHub staging deploy run `25425172057` passed after switching staging to RDS.
+    - staging smoke IDs: project `public-mcp-20260506084156-2606`, receiver `swift-light-3f2cae32`, mail id `mail-20260506-084200-da51aa193df75f0b`
+  - Production RDS migration:
+    - service freeze started `2026-05-06T08:46:29Z`
+    - `pg_dump`, `pg_restore`, and `psql` were PostgreSQL `18.3`
+    - source frozen counts: `messages=38`, `participants=42`, `projects=20`, `receipts=36`
+    - dump file `/tmp/agent-mail-prod-rds-20260506084629.dump`
+    - dump size `13267` bytes
+    - dump SHA-256 `b09ccfbc3d3bec4dd26ec5ca06255124e008319b0f77f58dacb4ea57f62af910`
+    - restored RDS counts before smoke matched exactly.
+    - GitHub production deploy run `25425410316` passed after production was switched to RDS.
+    - production workflow smoke IDs: project `public-mcp-20260506084737-6412`, receiver `crisp-light-093939de`, mail id `mail-20260506-084740-05385c0197470d09`
+  - Nano cutover:
+    - active app host `agent-mail-20260506-nano`
+    - bundle `nano_3_0`
+    - public/static IPv4 `100.22.38.210`
+    - private IP `172.26.1.42`
+    - direct-origin health before static IP move passed for both `agent-mail.cc` and `staging.agent-mail.cc`
+    - public production health after cutover returned `{"environment":"production","ok":true}`
+    - public staging health after cutover returned `{"environment":"staging","ok":true}`
+    - production MCP smoke after Nano cutover passed: project `public-mcp-20260506015313-27815`, receiver `warm-signal-d356945c`, mail id `mail-20260506-085321-4f4c6ed4b9583b94`
+    - staging MCP smoke after Nano cutover passed: project `public-mcp-20260506015335-27985`, receiver `steady-cloud-3afe8054`, mail id `mail-20260506-085341-53dadafd6c92b3b3`
+    - final RDS-backed production counts after all post-cutover smokes: `messages=40`, `participants=46`, `projects=22`, `receipts=38`
+    - final RDS-backed staging counts after Nano smoke: `messages=5`, `participants=10`, `projects=5`, `receipts=5`
+    - raw public checks to `100.22.38.210:8787`, `100.22.38.210:8788`, and `100.22.38.210:5432` timed out.
+    - old small instance dynamic IP `52.40.39.158` has both `agent-mail-server.service` and `agent-mail-server-staging.service` inactive.
+  - CI/deploy cache evidence:
+    - Production deploy run `25425410316` showed `sccache` `206 hits`, `0 misses`, `0 errors`.
+- Risk:
+  - This is a cheap single-instance app host plus single-AZ RDS shape, not high availability.
+  - The old small instance and old Lightsail managed DB are still retained for rollback and still cost money until retired.
+  - RDS security group still includes the old small instance private IP for rollback. Remove it after the rollback window.
+  - GitHub still emits a Node.js 20 deprecation warning for `mozilla-actions/sccache-action@v0.0.9`.
+- Next:
+  - Observe production and staging on Nano.
+  - After the rollback window, remove `172.26.8.117/32` from the RDS security group.
+  - Stop or delete the old small instance and old Lightsail managed database only after rollback is no longer needed.
+  - Land this progress update through the protected branch flow.

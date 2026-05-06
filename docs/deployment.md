@@ -63,6 +63,10 @@ The server host must provide:
 
 `AGENT_MAIL_TOKEN` is required. The server must not run unauthenticated.
 
+The current production host is a Lightsail Nano instance. Deploy workflows must continue to build release binaries on GitHub-hosted runners and upload only the compiled `agent-mail-server` binary. Do not build Rust on the Nano host.
+
+Production and staging use separate PostgreSQL databases and roles on the private RDS instance. RDS is not publicly accessible; the app host reaches it through Lightsail VPC peering and a security group scoped to the app host private IP.
+
 Set `AGENT_MAIL_ALLOWED_ORIGINS` to the public HTTPS origin for each environment. Examples:
 
 ```text
