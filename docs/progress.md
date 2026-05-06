@@ -150,3 +150,26 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Update Dependabot PR branches against current `main`.
   - Merge only PRs whose checks pass.
   - Configure real staging infrastructure/secrets.
+
+### 2026-05-06 - Dependabot PRs handled
+
+- Done:
+  - Updated Dependabot PR branches against current `main`.
+  - Merged PRs with successful real CI:
+    - #1 `softprops/action-gh-release` 2 to 3
+    - #2 `actions/checkout` 5 to 6
+    - #4 `tower-http` 0.6.8 to 0.6.9
+    - #5 `tokio` 1.52.1 to 1.52.2
+  - Investigated PR #3 `rand` 0.9.4 to 0.10.1 after CI failure.
+  - Updated `id.rs` on PR #3 for the `rand` 0.10 API (`SysRng` and `TryRng`).
+  - Ran local `make ci` on PR #3 and waited for GitHub CI to pass before merging.
+- Evidence:
+  - PR #3 failure log showed unresolved `TryRngCore` and `OsRng` imports.
+  - PR #3 GitHub CI run `25419345181` passed after the fix.
+  - Final `main` GitHub CI run `25419393345` passed after all Dependabot merges.
+- Risk:
+  - Dependency updates are merged, but no tagged release has been cut.
+  - Staging and production deploy workflows remain unproven.
+- Next:
+  - Configure staging infrastructure and GitHub environment secrets.
+  - Run staging workflow manually and record evidence.
