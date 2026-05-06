@@ -68,7 +68,7 @@ location /mcp {
 
 Open only SSH, HTTP, and HTTPS on the instance firewall. Do not expose ports `8787`, `8788`, or PostgreSQL publicly unless a temporary administrative maintenance window requires it.
 
-The RDS security group must allow `tcp/5432` only from the active Lightsail app host private IP. Keep the previous app host private IP allowed during the rollback window, then remove it after the old host is retired.
+The RDS security group must allow `tcp/5432` only from the active Lightsail app host private IP. A previous app host private IP may be kept temporarily during an explicit rollback window, but must be removed after the old host is retired.
 
 Do not rely on a snapshot downsize from a larger Lightsail bundle to Nano. The current production approach is a fresh Nano instance configured with the existing binary-only deploy shape, then static IPv4 reassignment after direct-origin health and RDS checks pass.
 
