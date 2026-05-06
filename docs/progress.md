@@ -553,3 +553,19 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Merge PR #21 through the protected branch flow.
   - Re-check main CI and staging after merge.
+
+### 2026-05-06 - sccache action removal test started
+
+- Done:
+  - Reviewed post-split main CI timing and warning output.
+  - Confirmed `mozilla-actions/sccache-action@v0.0.9` still emits a Node.js 20 warning even when forced onto Node 24.
+  - Removed the sccache action and `RUSTC_WRAPPER=sccache` environment from CI, staging, production, and release workflows.
+  - Kept `Swatinem/rust-cache@v2` and Docker Buildx layer caching.
+- Evidence:
+  - Main CI run `25430765986` passed with split jobs, but still warned about `mozilla-actions/sccache-action@v0.0.9`.
+  - The same run completed `Rust checks and real smoke tests` in 45 seconds; removing sccache should be measured against that baseline.
+- Risk:
+  - Release builds may become slower if Cargo registry/target caching alone is less effective than sccache for this project.
+  - The change should be accepted only if PR CI and staging deploy remain fast enough and warning output improves.
+- Next:
+  - Validate by opening a PR and comparing CI/staging timings against the post-split baseline.

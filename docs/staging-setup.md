@@ -69,7 +69,7 @@ Staging Deploy
 
 The workflow must:
 
-- build the release binary on the GitHub runner with Cargo/sccache caching
+- build the release binary on the GitHub runner with Cargo caching
 - deploy the current repository revision
 - upload only the compiled binary to the staging host
 - restart the staging service
