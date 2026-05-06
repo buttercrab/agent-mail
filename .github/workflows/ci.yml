@@ -64,7 +64,7 @@ jobs:
           docker buildx create --name agent-mail-ci --driver docker-container --use
           docker buildx build \
             --pull \
-            --load \
+            --output type=cacheonly \
             --tag agent-mail-server:ci \
             --cache-from type=gha \
             --cache-to type=gha,mode=max,ignore-error=true \
