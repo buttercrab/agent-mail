@@ -46,7 +46,7 @@ Required secrets:
 - `PROD_AGENT_MAIL_TOKEN`
 - `PROD_PUBLIC_IP`
 
-Production smoke targets `https://agent-mail.cc`.
+Production smoke targets `https://agent-mail.cc` and requires `/health` to report `environment=production`.
 
 ## Runtime Requirements
 
