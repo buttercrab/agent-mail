@@ -29,6 +29,7 @@ async fn main() -> anyhow::Result<()> {
     let app = http::router(http::AppState {
         store,
         token: config.token,
+        environment: config.environment,
         allowed_origins: config.allowed_origins,
         mcp: mcp::McpHub::default(),
     })

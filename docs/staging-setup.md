@@ -10,7 +10,8 @@ Staging is not complete until this checklist has real evidence.
 - PostgreSQL database separate from production
 - Bearer token separate from production
 - nginx/Cloudflare path equivalent to production
-- `agent-mail-server.service` or equivalent process supervisor
+- systemd service `agent-mail-server-staging.service`
+- isolated install root `/opt/agent-mail-staging`
 
 ## Required Server Environment
 
@@ -18,6 +19,7 @@ Staging is not complete until this checklist has real evidence.
 AGENT_MAIL_DATABASE_URL=...
 AGENT_MAIL_BIND=127.0.0.1:8788
 AGENT_MAIL_TOKEN=...
+AGENT_MAIL_ENVIRONMENT=staging
 AGENT_MAIL_ALLOWED_ORIGINS=https://staging.agent-mail.cc
 ```
 
@@ -45,6 +47,10 @@ Required variable:
 
 ```text
 STAGING_AGENT_MAIL_URL=https://staging.agent-mail.cc
+STAGING_SERVICE=agent-mail-server-staging.service
+STAGING_INSTALL_ROOT=/opt/agent-mail-staging
+STAGING_REMOTE_SOURCE=/tmp/agent-mail-staging-src
+STAGING_PRIVATE_PORT=8788
 ```
 
 ## Required Cloudflare/DNS
@@ -67,6 +73,7 @@ The workflow must:
 - restart the staging service
 - run `scripts/deployed_mcp_smoke.sh`
 - pass real HTTPS MCP/SSE checks against `STAGING_AGENT_MAIL_URL`
-- prove the raw staging service port is not publicly exposed
+- prove `/health` reports `environment=staging`
+- prove the raw staging service port is not publicly reachable
 
 Record the workflow URL and smoke project/mail IDs in `docs/progress.md`.
