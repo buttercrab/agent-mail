@@ -289,3 +289,44 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Land this progress update through the protected branch flow.
   - Configure production GitHub environment secrets/variables if not already present.
   - Cut a test release or manually deploy a selected ref to production, then run real production smoke and record evidence.
+
+### 2026-05-06 - Production deploy validated
+
+- Done:
+  - Added production deploy smoke hardening through PR #10 so the production workflow requires:
+    - `AGENT_MAIL_URL=https://agent-mail.cc`
+    - expected host `agent-mail.cc`
+    - `/health` environment `production`
+  - Created the GitHub `production` environment.
+  - Set production GitHub environment secrets:
+    - `PROD_HOST`
+    - `PROD_SSH_USER`
+    - `PROD_SSH_KEY`
+    - `PROD_AGENT_MAIL_TOKEN`
+    - `PROD_PUBLIC_IP`
+  - Ran the manual `Production Deploy` workflow from `main`.
+  - Confirmed production and staging stayed active after production deploy.
+- Evidence:
+  - PR #10 CI run `25420970576` passed.
+  - Main CI run `25421012984` passed after PR #10 merged.
+  - Manual production workflow run `25421069231` passed in GitHub Actions.
+  - Production workflow checked out `main` at commit `80d55cb5d96a6e70fe797acb52e4eb1a67a39c44`.
+  - Production deploy built `agent-mail-server` in release mode and restarted `agent-mail-server.service`.
+  - Production smoke output:
+    - project `public-mcp-20260506070129-2354`
+    - receiver `steady-river-b5e51127`
+    - mail id `mail-20260506-070144-d3aacb0bd2d8f1f7`
+  - `curl -fsS https://agent-mail.cc/health` returned `{"environment":"production","ok":true}`.
+  - `curl -fsS https://staging.agent-mail.cc/health` returned `{"environment":"staging","ok":true}`.
+  - Remote host check showed:
+    - `agent-mail-server.service` active
+    - `agent-mail-server-staging.service` active
+    - listeners on `127.0.0.1:8787` and `127.0.0.1:8788`
+  - Local TCP checks to `100.22.38.210:8787` and `100.22.38.210:8788` both failed to connect.
+- Risk:
+  - Docker build is still unverified because the local Docker daemon was unavailable earlier.
+  - No tagged release has been cut yet.
+- Next:
+  - Land this progress update through the protected branch flow.
+  - Decide whether to require Docker build in CI or leave Docker as best-effort local packaging.
+  - Cut the first tagged release if the current deployed commit is accepted as the initial release candidate.
