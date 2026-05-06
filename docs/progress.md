@@ -173,3 +173,20 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Configure staging infrastructure and GitHub environment secrets.
   - Run staging workflow manually and record evidence.
+
+### 2026-05-06 - Staging provider access check
+
+- Done:
+  - Checked whether staging can be provisioned with currently available local credentials.
+  - Added `docs/staging-setup.md` with the exact required infrastructure, GitHub secrets, DNS/TLS requirements, and verification gate.
+- Evidence:
+  - `aws sts get-caller-identity` failed with: `Your session has expired. Please reauthenticate using 'aws login'.`
+  - `wrangler whoami` failed with: `Not logged in.`
+  - Production SSH access still works, and `agent-mail-server.service` is active on the production host.
+- Risk:
+  - A true staging public edge cannot be created or verified without AWS and Cloudflare access, or equivalent staging host/DNS details from the operator.
+  - Same-host staging may be technically possible, but it still needs DNS/TLS configuration for `staging.agent-mail.cc` to satisfy real deployed MCP/SSE validation.
+- Next:
+  - Reauthenticate AWS and Cloudflare, or provide staging host/DNS/token details.
+  - Configure GitHub `staging` environment secrets.
+  - Run the manual `Staging Deploy` workflow and record real evidence.

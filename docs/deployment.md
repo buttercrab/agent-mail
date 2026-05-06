@@ -26,6 +26,8 @@ The staging workflow deploys over SSH, restarts `agent-mail-server.service`, and
 
 The workflow is manual until real staging infrastructure and GitHub environment secrets are configured. After the first successful manual staging run, it can be changed to run automatically on pushes to `main`.
 
+See [Staging setup](staging-setup.md) for the required checklist.
+
 ### Production
 
 Production deploys are manual.
