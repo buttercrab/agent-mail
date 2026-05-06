@@ -90,9 +90,63 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Risk:
   - Docker build did not run because the local Docker daemon was unavailable: `failed to connect to the docker API`.
   - GitHub Actions have not run remotely yet.
-  - Staging infrastructure and GitHub staging secrets/variables are not created or verified.
+  - The first remote staging run failed because staging secrets/variables are not created. This is expected and proves staging is not configured.
   - Production deploy workflow is defined but has not deployed this new repository.
 - Next:
   - Commit and push the initial repository setup.
   - Configure GitHub environments/secrets for staging and production.
   - Run remote GitHub CI and staging deploy before treating the repository setup as complete.
+
+### 2026-05-06 - Remote initial push
+
+- Done:
+  - Created initial commit `11a8e12` and pushed `main` to `git@github.com:buttercrab/agent-mail.git`.
+  - Checked GitHub workflow state after push.
+- Evidence:
+  - `git push -u origin main` succeeded.
+  - GitHub repo resolved as `buttercrab/agent-mail`.
+  - Remote staging run `25419056500` failed at the explicit required-secrets gate because all staging values were empty.
+- Risk:
+  - Staging cannot be considered set up until real infrastructure and GitHub environment secrets/variables exist.
+- Next:
+  - Make staging workflow manual-only until staging is actually configured.
+  - Push that correction and check remote CI status.
+
+### 2026-05-06 - Remote CI smoke fix
+
+- Done:
+  - Investigated failed remote CI run `25419056497`.
+  - Identified failure in `make real-test` while starting temporary PostgreSQL on the GitHub Ubuntu runner.
+  - Updated smoke scripts to use a temp-directory Unix socket with `postgres -k`.
+  - Updated failure cleanup to print PostgreSQL and server logs.
+  - Re-ran local `make ci` after the script change.
+- Evidence:
+  - Failed GitHub log showed `pg_ctl: could not start server` in `Real PostgreSQL HTTP/MCP smoke tests`.
+  - Local `bash -n scripts/*.sh && make ci` passed after the change.
+- Risk:
+  - The remote CI fix still needs confirmation from a new GitHub Actions run.
+- Next:
+  - Push the smoke-script fix.
+  - Wait for the new remote CI run and inspect any real failure logs.
+
+### 2026-05-06 - Remote CI green
+
+- Done:
+  - Pushed smoke-script fix commit `4c4817f`.
+  - Waited for the new GitHub Actions `CI` run on `main`.
+- Evidence:
+  - GitHub Actions run `25419133961` completed successfully.
+  - The successful job included:
+    - Install PostgreSQL binaries
+    - Check formatting
+    - Clippy
+    - Rust tests
+    - Real PostgreSQL HTTP/MCP smoke tests
+- Risk:
+  - Staging deploy is still not configured.
+  - Docker build is still unverified because the local Docker daemon is unavailable.
+  - Dependabot opened dependency PRs whose initial checks failed before the CI smoke-script fix reached their branches.
+- Next:
+  - Update Dependabot PR branches against current `main`.
+  - Merge only PRs whose checks pass.
+  - Configure real staging infrastructure/secrets.
