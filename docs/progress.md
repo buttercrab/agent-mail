@@ -233,3 +233,28 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Land this hardening through a protected-branch PR.
   - Provision same-host staging with `/opt/agent-mail-staging`, `agent-mail-server-staging.service`, `127.0.0.1:8788`, `AGENT_MAIL_ENVIRONMENT=staging`, and separate PostgreSQL credentials.
   - Set the GitHub `staging` environment secrets/variables and run the manual `Staging Deploy` workflow.
+
+### 2026-05-06 - First staging workflow run
+
+- Done:
+  - Created isolated staging PostgreSQL role/database:
+    - database `agentmail_staging`
+    - owner `agentmail_staging`
+  - Installed staging host prerequisites:
+    - `/etc/agent-mail/agent-mail-staging.env`
+    - `/etc/systemd/system/agent-mail-server-staging.service`
+    - `/etc/nginx/conf.d/agent-mail-staging.conf`
+    - Cloudflare Origin certificate/key for `staging.agent-mail.cc`
+  - Confirmed Cloudflare DNS for `staging.agent-mail.cc` points to the Lightsail IP and is proxied.
+  - Configured GitHub `staging` environment secrets/variables.
+  - Ran manual staging workflow `25420246932`.
+- Evidence:
+  - Cloudflare DNS API returned `staging.agent-mail.cc` content `100.22.38.210`, proxied `true`.
+  - Host checks showed production `agent-mail-server.service` active and staging service enabled.
+  - Main CI run `25420205581` passed after PR #7 merged.
+  - Staging workflow `25420246932` failed during deploy with `cd: /opt/agent-mail-staging/src: Permission denied`.
+- Risk:
+  - Staging is still not validated; the failure happened before service restart and public MCP smoke.
+- Next:
+  - Fix staging deploy permissions so the SSH deploy user can build in the isolated staging source tree.
+  - Re-run the manual staging workflow and record smoke evidence only if it passes.
