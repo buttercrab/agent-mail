@@ -36,7 +36,7 @@ This repository is the production home for Agent Mail: a Rust/PostgreSQL service
 2. Import the existing Agent Mail service from the skills repository.
 3. Add strict Rust and OSS baseline configuration.
 4. Add local real validation scripts and CI workflows.
-5. Add staging deployment validation.
+5. Add staging deployment validation. Keep it manual until real staging infrastructure and secrets exist.
 6. Add production release/deploy workflow with manual approval.
 7. Audit the repository against the success criteria.
 
