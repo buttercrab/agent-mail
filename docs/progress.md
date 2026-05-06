@@ -553,3 +553,28 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Merge PR #21 through the protected branch flow.
   - Re-check main CI and staging after merge.
+
+### 2026-05-06 - sccache action removal validated
+
+- Done:
+  - Reviewed post-split main CI timing and warning output.
+  - Confirmed `mozilla-actions/sccache-action@v0.0.9` still emits a Node.js 20 warning even when forced onto Node 24.
+  - Removed the sccache action and `RUSTC_WRAPPER=sccache` environment from CI, staging, production, and release workflows.
+  - Kept `Swatinem/rust-cache@v2` and Docker Buildx layer caching.
+  - Replaced Docker setup/build actions in CI with a shell-based `docker buildx` invocation to test removing the remaining Docker action Node.js 20 warnings.
+  - Switched the shell Docker build to `--output type=cacheonly` so CI validates the image build and exports cache without loading an unused local image.
+  - Found newer Docker actions and switched CI Docker back to actions using `docker/setup-buildx-action@v4` and `docker/build-push-action@v7`.
+- Evidence:
+  - Main CI run `25430765986` passed with split jobs, but still warned about `mozilla-actions/sccache-action@v0.0.9`.
+  - The same run completed `Rust checks and real smoke tests` in 45 seconds; removing sccache should be measured against that baseline.
+  - PR #22 first test run `25460435872` passed with Rust checks in 51 seconds and Docker in 2 minutes 24 seconds, but still warned for `docker/build-push-action@v6` and `docker/setup-buildx-action@v3`.
+  - PR #22 shell Buildx run `25460604176` passed with Rust checks in 45 seconds and Docker in 2 minutes 49 seconds, with the Docker action Node.js 20 warning removed.
+  - PR #22 cache-only shell Buildx run `25460812572` passed with Rust checks in 46 seconds and Docker in 2 minutes 41 seconds, but remained slower than the Docker action baseline.
+  - PR #22 newer Docker action run `25461005821` passed with Rust checks in 43 seconds and Docker in 2 minutes, faster than the post-split main baseline.
+  - Run `25461005821` had no `Node.js 20 is deprecated` annotation.
+- Risk:
+  - `Swatinem/rust-cache@v2` still emits a Node `punycode` deprecation log under Node 24, but it is not the GitHub Actions Node 20 annotation.
+  - Docker build still logs that no image output is specified, which is expected because CI only needs build validation and cache export.
+- Next:
+  - Merge PR #22 through the protected branch flow.
+  - Re-check main CI and staging after merge.
