@@ -554,7 +554,7 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Merge PR #21 through the protected branch flow.
   - Re-check main CI and staging after merge.
 
-### 2026-05-06 - sccache action removal test started
+### 2026-05-06 - sccache action removal validated
 
 - Done:
   - Reviewed post-split main CI timing and warning output.
@@ -570,8 +570,11 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - PR #22 first test run `25460435872` passed with Rust checks in 51 seconds and Docker in 2 minutes 24 seconds, but still warned for `docker/build-push-action@v6` and `docker/setup-buildx-action@v3`.
   - PR #22 shell Buildx run `25460604176` passed with Rust checks in 45 seconds and Docker in 2 minutes 49 seconds, with the Docker action Node.js 20 warning removed.
   - PR #22 cache-only shell Buildx run `25460812572` passed with Rust checks in 46 seconds and Docker in 2 minutes 41 seconds, but remained slower than the Docker action baseline.
+  - PR #22 newer Docker action run `25461005821` passed with Rust checks in 43 seconds and Docker in 2 minutes, faster than the post-split main baseline.
+  - Run `25461005821` had no `Node.js 20 is deprecated` annotation.
 - Risk:
-  - Release builds may become slower if Cargo registry/target caching alone is less effective than sccache for this project.
-  - The change should be accepted only if PR CI and staging deploy remain fast enough and warning output improves.
+  - `Swatinem/rust-cache@v2` still emits a Node `punycode` deprecation log under Node 24, but it is not the GitHub Actions Node 20 annotation.
+  - Docker build still logs that no image output is specified, which is expected because CI only needs build validation and cache export.
 - Next:
-  - Validate by opening a PR and comparing CI/staging timings against the post-split baseline.
+  - Merge PR #22 through the protected branch flow.
+  - Re-check main CI and staging after merge.
