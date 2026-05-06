@@ -90,9 +90,24 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Risk:
   - Docker build did not run because the local Docker daemon was unavailable: `failed to connect to the docker API`.
   - GitHub Actions have not run remotely yet.
-  - Staging infrastructure and GitHub staging secrets/variables are not created or verified.
+  - The first remote staging run failed because staging secrets/variables are not created. This is expected and proves staging is not configured.
   - Production deploy workflow is defined but has not deployed this new repository.
 - Next:
   - Commit and push the initial repository setup.
   - Configure GitHub environments/secrets for staging and production.
   - Run remote GitHub CI and staging deploy before treating the repository setup as complete.
+
+### 2026-05-06 - Remote initial push
+
+- Done:
+  - Created initial commit `11a8e12` and pushed `main` to `git@github.com:buttercrab/agent-mail.git`.
+  - Checked GitHub workflow state after push.
+- Evidence:
+  - `git push -u origin main` succeeded.
+  - GitHub repo resolved as `buttercrab/agent-mail`.
+  - Remote staging run `25419056500` failed at the explicit required-secrets gate because all staging values were empty.
+- Risk:
+  - Staging cannot be considered set up until real infrastructure and GitHub environment secrets/variables exist.
+- Next:
+  - Make staging workflow manual-only until staging is actually configured.
+  - Push that correction and check remote CI status.
