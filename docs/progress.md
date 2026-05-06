@@ -375,6 +375,7 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
   - Started workflow changes to make Nano viable:
     - CI, release, staging deploy, and production deploy use Cargo cache plus `sccache`.
     - Docker builds use GitHub Actions cache via BuildKit.
+    - Dockerfile uses `cargo-chef` to cache dependency compilation layers separately from application source changes.
     - staging and production deploys build release binaries on GitHub-hosted runners.
     - staging and production hosts receive only the compiled `agent-mail-server` binary instead of building Rust on the instance.
 - Evidence:
