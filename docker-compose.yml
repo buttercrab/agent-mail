@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: agent_mail
+      POSTGRES_PASSWORD: agent_mail
+      POSTGRES_DB: agent_mail
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_mail -d agent_mail"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  agent-mail:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AGENT_MAIL_DATABASE_URL: postgres://agent_mail:agent_mail@postgres:5432/agent_mail?sslmode=disable
+      AGENT_MAIL_BIND: 0.0.0.0:8787
+      AGENT_MAIL_TOKEN: local-dev-token
+      AGENT_MAIL_ALLOWED_ORIGINS: http://localhost:8787,http://127.0.0.1:8787
+    ports:
+      - "8787:8787"

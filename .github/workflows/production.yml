@@ -1,0 +1,70 @@
+name: Production Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git tag or commit to deploy
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy-production:
+    name: Deploy and verify production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Require production configuration
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_AGENT_MAIL_TOKEN: ${{ secrets.PROD_AGENT_MAIL_TOKEN }}
+          PROD_PUBLIC_IP: ${{ secrets.PROD_PUBLIC_IP }}
+        run: |
+          test -n "$PROD_HOST"
+          test -n "$PROD_SSH_USER"
+          test -n "$PROD_SSH_KEY"
+          test -n "$PROD_AGENT_MAIL_TOKEN"
+          test -n "$PROD_PUBLIC_IP"
+
+      - name: Deploy production over SSH
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        run: |
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$PROD_SSH_KEY" > ~/.ssh/agent-mail-production
+          chmod 0600 ~/.ssh/agent-mail-production
+          rsync -az --delete --exclude target -e "ssh -i ~/.ssh/agent-mail-production -o StrictHostKeyChecking=accept-new" ./ "$PROD_SSH_USER@$PROD_HOST:/tmp/agent-mail-src/"
+          ssh -i ~/.ssh/agent-mail-production -o StrictHostKeyChecking=accept-new "$PROD_SSH_USER@$PROD_HOST" '
+            set -euo pipefail
+            sudo mkdir -p /opt/agent-mail/src /opt/agent-mail/bin
+            sudo rsync -a --delete /tmp/agent-mail-src/ /opt/agent-mail/src/
+            cd /opt/agent-mail/src
+            cargo build --release -p agent-mail-server
+            sudo install -m 0755 target/release/agent-mail-server /opt/agent-mail/bin/agent-mail-server
+            sudo systemctl restart agent-mail-server.service
+            sudo systemctl is-active agent-mail-server.service
+          '
+
+      - name: Verify production public MCP edge
+        env:
+          AGENT_MAIL_TOKEN: ${{ secrets.PROD_AGENT_MAIL_TOKEN }}
+          AGENT_MAIL_URL: https://agent-mail.cc
+          PUBLIC_IP: ${{ secrets.PROD_PUBLIC_IP }}
+        run: ./scripts/deployed_mcp_smoke.sh
