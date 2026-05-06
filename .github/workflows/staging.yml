@@ -73,11 +73,14 @@ jobs:
           test "$STAGING_SERVICE" = "agent-mail-server-staging.service"
           test "$STAGING_INSTALL_ROOT" = "/opt/agent-mail-staging"
           test "$STAGING_REMOTE_SOURCE" = "/tmp/agent-mail-staging-src"
+          deploy_user="$(id -un)"
           sudo mkdir -p "$STAGING_INSTALL_ROOT/src" "$STAGING_INSTALL_ROOT/bin"
+          sudo chmod 0755 "$STAGING_INSTALL_ROOT" "$STAGING_INSTALL_ROOT/src" "$STAGING_INSTALL_ROOT/bin"
           sudo rsync -a --delete "$STAGING_REMOTE_SOURCE/" "$STAGING_INSTALL_ROOT/src/"
+          sudo chown -R "$deploy_user:$deploy_user" "$STAGING_INSTALL_ROOT/src"
           cd "$STAGING_INSTALL_ROOT/src"
           cargo build --release -p agent-mail-server
-          sudo install -m 0755 target/release/agent-mail-server "$STAGING_INSTALL_ROOT/bin/agent-mail-server"
+          sudo install -o root -g root -m 0755 target/release/agent-mail-server "$STAGING_INSTALL_ROOT/bin/agent-mail-server"
           sudo systemctl restart "$STAGING_SERVICE"
           sudo systemctl is-active "$STAGING_SERVICE"'
           printf -v q_script '%q' "$remote_script"
