@@ -122,6 +122,7 @@ impl Store {
     }
 
     pub async fn participant(&self, identity: &str) -> Result<Participant> {
+        let identity = identity.trim();
         validation::identity(identity)?;
         let row = sqlx::query(
             "SELECT identity, role, created_at, updated_at FROM participants WHERE identity = $1",
@@ -162,6 +163,7 @@ impl Store {
     }
 
     pub async fn project(&self, alias: &str) -> Result<Project> {
+        let alias = alias.trim();
         validation::alias(alias)?;
         let row = sqlx::query("SELECT alias, root, created_at FROM projects WHERE alias = $1")
             .bind(alias)
@@ -179,9 +181,10 @@ impl Store {
     }
 
     pub async fn send(&self, input: SendMessage) -> Result<Message> {
-        validation::alias(&input.project)?;
+        let project = input.project.trim().to_string();
+        validation::alias(&project)?;
         let sender = self.participant(&input.sender_identity).await?;
-        self.project(&input.project).await?;
+        self.project(&project).await?;
         let (kind, recipient) = self.normalize_recipient(&input.to_kind, &input.to).await?;
         let subject = input.subject.trim();
         if subject.is_empty() {
@@ -191,7 +194,7 @@ impl Store {
         let (created_at, created_at_ns) = time::now_parts();
         let msg = Message {
             id,
-            project: input.project,
+            project,
             sender_identity: sender.identity,
             sender_role: sender.role,
             recipient_kind: kind,
@@ -224,6 +227,8 @@ impl Store {
     }
 
     pub async fn inbox(&self, project: &str, identity: &str) -> Result<Inbox> {
+        let project = project.trim();
+        let identity = identity.trim();
         validation::alias(project)?;
         let participant = self.participant(identity).await?;
         self.project(project).await?;
@@ -258,6 +263,9 @@ impl Store {
     }
 
     pub async fn mark_read(&self, project: &str, mail_id: &str, identity: &str) -> Result<()> {
+        let project = project.trim();
+        let mail_id = mail_id.trim();
+        let identity = identity.trim();
         self.delivered_message(project, mail_id, identity).await?;
         let (now, _) = time::now_parts();
         sqlx::query(
@@ -275,7 +283,8 @@ impl Store {
     }
 
     pub async fn message(&self, project: &str, mail_id: &str, identity: &str) -> Result<Message> {
-        self.delivered_message(project, mail_id, identity).await
+        self.delivered_message(project.trim(), mail_id.trim(), identity.trim())
+            .await
     }
 
     async fn delivered_message(
@@ -284,6 +293,9 @@ impl Store {
         mail_id: &str,
         identity: &str,
     ) -> Result<Message> {
+        let project = project.trim();
+        let mail_id = mail_id.trim();
+        let identity = identity.trim();
         validation::alias(project)?;
         let participant = self.participant(identity).await?;
         let row = sqlx::query(
@@ -353,8 +365,10 @@ impl Store {
     async fn allocate_identity(&self) -> Result<String> {
         for _ in 0..20 {
             let candidate = id::identity().map_err(|err| AppError::BadRequest(err.to_string()))?;
-            if self.participant(&candidate).await.is_err() {
-                return Ok(candidate);
+            match self.participant(&candidate).await {
+                Ok(_) => continue,
+                Err(AppError::NotFound(_)) => return Ok(candidate),
+                Err(err) => return Err(err),
             }
         }
         Err(AppError::Conflict(

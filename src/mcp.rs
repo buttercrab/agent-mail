@@ -13,7 +13,7 @@ use axum::{
         sse::{Event, KeepAlive, Sse},
     },
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc};
 
@@ -107,11 +107,10 @@ pub async fn mcp_post(
     };
 
     let session_id = header_text(&headers, MCP_SESSION_ID);
-    if request.method != "initialize" && session_id.is_none() {
-        return (StatusCode::BAD_REQUEST, "missing MCP-Session-Id").into_response();
-    }
     if request.method != "initialize" {
-        let id = session_id.as_deref().unwrap();
+        let Some(id) = session_id.as_deref() else {
+            return (StatusCode::BAD_REQUEST, "missing MCP-Session-Id").into_response();
+        };
         let sessions = state.mcp.sessions.lock().await;
         let Some(session) = sessions.get(id) else {
             return (StatusCode::NOT_FOUND, "unknown MCP session").into_response();
@@ -126,11 +125,15 @@ pub async fn mcp_post(
     match result {
         Ok(_) if is_notification => StatusCode::ACCEPTED.into_response(),
         Ok(Some((reply, new_session_id))) => {
-            let mut response = json_rpc_http(request.id, reply);
+            let mut response = json_rpc_http(request.id.clone(), reply);
             if let Some(id) = new_session_id {
-                response
-                    .headers_mut()
-                    .insert(MCP_SESSION_ID, HeaderValue::from_str(&id).unwrap());
+                let Ok(value) = HeaderValue::from_str(&id) else {
+                    return json_rpc_http(
+                        request.id.clone(),
+                        rpc_error(request.id, -32000, "invalid generated MCP session id"),
+                    );
+                };
+                response.headers_mut().insert(MCP_SESSION_ID, value);
             }
             response
         }
@@ -207,7 +210,7 @@ async fn handle_rpc(
                     json!({
                         "content": [{
                             "type": "text",
-                            "text": serde_json::to_string_pretty(&output).unwrap()
+                            "text": json_text(&output)?
                         }]
                     }),
                 ),
@@ -292,7 +295,7 @@ async fn call_tool(
             }
             mcp_session.identity = Some(session.identity.clone());
             mcp_session.role = Some(session.role.clone());
-            Ok(serde_json::to_value(session).unwrap())
+            json_value(session)
         }
         "agent_mail_project_add" => {
             let alias = required_string(&args, "alias")?;
@@ -300,7 +303,7 @@ async fn call_tool(
             let project = state.store.add_project(&alias, &root).await?;
             notify_resource(state, "agent-mail://projects").await;
             notify_list_changed(state).await;
-            Ok(serde_json::to_value(project).unwrap())
+            json_value(project)
         }
         "agent_mail_send" => {
             let (identity, _) = session_participant(state, session_id).await?;
@@ -320,7 +323,7 @@ async fn call_tool(
                 })
                 .await?;
             notify_matching_inboxes(state, &message.project).await;
-            Ok(serde_json::to_value(message).unwrap())
+            json_value(message)
         }
         "agent_mail_mark_read" => {
             let (identity, _) = session_participant(state, session_id).await?;
@@ -359,9 +362,9 @@ async fn read_resource(state: &Arc<AppState>, uri: &str) -> Result<Value> {
     let value = if uri == "agent-mail://projects" {
         json!({ "projects": state.store.projects().await? })
     } else if let Some((project, identity)) = parse_inbox_uri(uri)? {
-        serde_json::to_value(state.store.inbox(&project, &identity).await?).unwrap()
+        json_value(state.store.inbox(&project, &identity).await?)?
     } else if let Some((project, mail_id, identity)) = parse_message_uri(uri)? {
-        serde_json::to_value(state.store.message(&project, &mail_id, &identity).await?).unwrap()
+        json_value(state.store.message(&project, &mail_id, &identity).await?)?
     } else {
         return Err(AppError::NotFound(format!("unknown resource URI {uri:?}")));
     };
@@ -369,7 +372,7 @@ async fn read_resource(state: &Arc<AppState>, uri: &str) -> Result<Value> {
         "contents": [{
             "uri": uri,
             "mimeType": "application/json",
-            "text": serde_json::to_string_pretty(&value).unwrap()
+            "text": json_text(&value)?
         }]
     }))
 }
@@ -503,8 +506,8 @@ async fn notify_resource(state: &Arc<AppState>, uri: &str) {
         "method": "notifications/resources/updated",
         "params": { "uri": uri }
     });
-    let mut sessions = state.mcp.sessions.lock().await;
-    for session in sessions.values_mut() {
+    let sessions = state.mcp.sessions.lock().await;
+    for session in sessions.values() {
         if (session.subscriptions.contains(uri) || uri == "agent-mail://projects")
             && let Some(stream) = &session.stream
         {
@@ -518,8 +521,8 @@ async fn notify_list_changed(state: &Arc<AppState>) {
         "jsonrpc": "2.0",
         "method": "notifications/resources/list_changed"
     });
-    let mut sessions = state.mcp.sessions.lock().await;
-    for session in sessions.values_mut() {
+    let sessions = state.mcp.sessions.lock().await;
+    for session in sessions.values() {
         if let Some(stream) = &session.stream {
             let _ = stream.send(notification.clone());
         }
@@ -638,6 +641,16 @@ fn optional_string(params: &Value, name: &str) -> Option<String> {
     params.get(name).and_then(Value::as_str).map(str::to_string)
 }
 
+fn json_value<T: Serialize>(value: T) -> Result<Value> {
+    serde_json::to_value(value)
+        .map_err(|err| AppError::Internal(format!("serialize response: {err}")))
+}
+
+fn json_text(value: &Value) -> Result<String> {
+    serde_json::to_string_pretty(value)
+        .map_err(|err| AppError::Internal(format!("serialize response: {err}")))
+}
+
 fn require_session_id(session_id: Option<&str>) -> Result<&str> {
     session_id.ok_or_else(|| AppError::BadRequest("missing MCP session".into()))
 }
@@ -749,5 +762,56 @@ fn validate_session_protocol(session: &McpSession, headers: &HeaderMap) -> Resul
         Err(AppError::BadRequest(
             "unsupported MCP-Protocol-Version for session".into(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_component, encode_component, parse_inbox_uri, parse_message_uri};
+
+    #[test]
+    fn uri_component_round_trips_reserved_bytes() {
+        let raw = "project/with space?and=value";
+        let encoded = encode_component(raw);
+
+        assert_eq!(encoded, "project%2Fwith%20space%3Fand%3Dvalue");
+        assert_eq!(decode_component(&encoded).unwrap(), raw);
+    }
+
+    #[test]
+    fn inbox_uri_parser_decodes_identity_query() {
+        let parsed =
+            parse_inbox_uri("agent-mail://projects/my.project/inbox?identity=worker%2Ffrontend")
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(
+            parsed,
+            ("my.project".to_string(), "worker/frontend".to_string())
+        );
+    }
+
+    #[test]
+    fn message_uri_parser_decodes_message_id_and_identity() {
+        let parsed = parse_message_uri(
+            "agent-mail://projects/my.project/messages/mail%2F1?identity=worker%2Ffrontend",
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(
+            parsed,
+            (
+                "my.project".to_string(),
+                "mail/1".to_string(),
+                "worker/frontend".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn uri_component_rejects_invalid_percent_encoding() {
+        assert!(decode_component("%").is_err());
+        assert!(decode_component("%xy").is_err());
     }
 }

@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| "agent_mail_server=info,tower_http=info".into()),
         )
         .init();
-    let config = Config::from_env();
+    let config = Config::from_env().context("load configuration")?;
     let store = Store::connect(&config.database_url)
         .await
         .context("connect to postgres and migrate schema")?;

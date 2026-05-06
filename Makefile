@@ -1,16 +1,16 @@
 .PHONY: build fmt clippy test real-test mcp-test public-mcp-smoke ci
 
 build:
-	cargo build -p agent-mail-server
+	cargo build
 
 fmt:
 	cargo fmt --all -- --check
 
 clippy:
-	cargo clippy --workspace --all-targets --all-features -- -D warnings
+	cargo clippy --all-targets --all-features -- -D warnings
 
 test:
-	cargo test --workspace
+	cargo test
 
 real-test:
 	./scripts/real_postgres_http_test.sh

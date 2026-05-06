@@ -42,7 +42,7 @@ jobs:
           echo "SCCACHE_CACHE_SIZE=2G" >> "$GITHUB_ENV"
 
       - name: Build release binary
-        run: cargo build --release -p agent-mail-server
+        run: cargo build --release
 
       - name: Require staging configuration
         env:
