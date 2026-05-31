@@ -262,6 +262,89 @@ impl Store {
         })
     }
 
+    pub async fn unread_summary(&self, identity: &str, role: &str) -> Result<Vec<(String, i64)>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT m.project_alias, COUNT(*) AS unread
+            FROM messages m
+            LEFT JOIN receipts r ON r.message_id = m.id AND r.identity = $1
+            WHERE r.message_id IS NULL
+              AND (
+                (m.recipient_kind = 'identity' AND m.recipient = $1) OR
+                (m.recipient_kind = 'role' AND m.recipient = $2) OR
+                m.recipient_kind = 'broadcast'
+              )
+            GROUP BY m.project_alias
+            "#,
+        )
+        .bind(identity)
+        .bind(role)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|row| {
+                (
+                    row.get::<String, _>("project_alias"),
+                    row.get::<i64, _>("unread"),
+                )
+            })
+            .collect())
+    }
+
+    pub async fn drain(&self, project: &str, identity: &str) -> Result<Inbox> {
+        let project = project.trim();
+        let identity = identity.trim();
+        validation::alias(project)?;
+        let participant = self.participant(identity).await?;
+        self.project(project).await?;
+        let mut tx = self.pool.begin().await?;
+        let rows = sqlx::query(
+            r#"
+            SELECT m.id, m.project_alias, m.sender_identity, m.sender_role, m.recipient_kind, m.recipient, m.subject, m.body, m.created_at, m.created_at_ns, '' AS read_at
+            FROM messages m
+            LEFT JOIN receipts r ON r.message_id = m.id AND r.identity = $1
+            WHERE m.project_alias = $2
+              AND r.message_id IS NULL
+              AND (
+                (m.recipient_kind = 'identity' AND m.recipient = $1) OR
+                (m.recipient_kind = 'role' AND m.recipient = $3) OR
+                m.recipient_kind = 'broadcast'
+              )
+            ORDER BY m.created_at_ns ASC, m.id ASC
+            "#,
+        )
+        .bind(&participant.identity)
+        .bind(project)
+        .bind(&participant.role)
+        .fetch_all(&mut *tx)
+        .await?;
+        let (now, _) = time::now_parts();
+        let mut messages: Vec<Message> = rows.iter().map(message_from_row).collect();
+        for msg in &mut messages {
+            sqlx::query(
+                r#"
+                INSERT INTO receipts(message_id, identity, read_at) VALUES ($1, $2, $3)
+                ON CONFLICT(message_id, identity) DO NOTHING
+                "#,
+            )
+            .bind(&msg.id)
+            .bind(&participant.identity)
+            .bind(&now)
+            .execute(&mut *tx)
+            .await?;
+            msg.read_at = now.clone();
+        }
+        tx.commit().await?;
+        Ok(Inbox {
+            project: project.to_string(),
+            identity: participant.identity,
+            role: participant.role,
+            unread_count: messages.len(),
+            messages,
+        })
+    }
+
     pub async fn mark_read(&self, project: &str, mail_id: &str, identity: &str) -> Result<()> {
         let project = project.trim();
         let mail_id = mail_id.trim();

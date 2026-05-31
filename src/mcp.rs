@@ -99,11 +99,11 @@ pub async fn mcp_post(
         return err.into_response();
     }
     if let Err(err) = validate_rpc_shape(&input) {
-        return json_rpc_http(None, rpc_error(None, err.code, &err.message));
+        return json_rpc_http(rpc_error(None, err.code, &err.message));
     }
     let request: RpcRequest = match serde_json::from_value(input) {
         Ok(value) => value,
-        Err(err) => return json_rpc_http(None, rpc_error(None, -32700, &err.to_string())),
+        Err(err) => return json_rpc_http(rpc_error(None, -32700, &err.to_string())),
     };
 
     let session_id = header_text(&headers, MCP_SESSION_ID);
@@ -125,24 +125,33 @@ pub async fn mcp_post(
     match result {
         Ok(_) if is_notification => StatusCode::ACCEPTED.into_response(),
         Ok(Some((reply, new_session_id))) => {
-            let mut response = json_rpc_http(request.id.clone(), reply);
+            let mut response = json_rpc_http(reply);
             if let Some(id) = new_session_id {
                 let Ok(value) = HeaderValue::from_str(&id) else {
-                    return json_rpc_http(
-                        request.id.clone(),
-                        rpc_error(request.id, -32000, "invalid generated MCP session id"),
-                    );
+                    return json_rpc_http(rpc_error(
+                        request.id,
+                        -32000,
+                        "invalid generated MCP session id",
+                    ));
                 };
                 response.headers_mut().insert(MCP_SESSION_ID, value);
             }
             response
         }
-        Ok(None) => json_rpc_http(request.id.clone(), rpc_result(request.id, json!({}))),
-        Err(err) => json_rpc_http(
-            request.id.clone(),
-            rpc_error(request.id, -32000, &err.to_string()),
-        ),
+        Ok(None) => json_rpc_http(rpc_result(request.id, json!({}))),
+        Err(err) => json_rpc_http(rpc_error(request.id, -32000, &err.to_string())),
     }
+}
+
+pub async fn mcp_delete(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    if let Err(err) = authorize_mcp(&state, &headers) {
+        return err.into_response();
+    }
+    let Some(session_id) = header_text(&headers, MCP_SESSION_ID) else {
+        return (StatusCode::BAD_REQUEST, "missing MCP-Session-Id").into_response();
+    };
+    state.mcp.sessions.lock().await.remove(&session_id);
+    StatusCode::NO_CONTENT.into_response()
 }
 
 async fn handle_rpc(
@@ -175,7 +184,7 @@ async fn handle_rpc(
                             "title": "Agent Mail",
                             "version": env!("CARGO_PKG_VERSION")
                         },
-                        "instructions": "Use tools only for mutations. Read inboxes and messages through MCP resources; resource reads do not mark mail read."
+                        "instructions": "Your Agent Mail identity is durable: pass the same identity to agent_mail_start to resume the same mailbox across reconnects. Read AND acknowledge mail by calling agent_mail_drain at task checkpoints; it returns unread message bodies and marks them read in one call. Every tool result includes a compact agent_mail unread badge (unread_total plus per-project counts) so you always know when mail is waiting. Plain resource reads (resources/read) deliberately do NOT mark mail read; only agent_mail_drain (or agent_mail_mark_read) acknowledges it."
                     }),
                 ),
                 Some(id),
@@ -204,18 +213,8 @@ async fn handle_rpc(
                 .cloned()
                 .unwrap_or_else(|| json!({}));
             let output = call_tool(state, session_id, &name, args).await?;
-            Ok(Some((
-                rpc_result(
-                    request.id.clone(),
-                    json!({
-                        "content": [{
-                            "type": "text",
-                            "text": json_text(&output)?
-                        }]
-                    }),
-                ),
-                None,
-            )))
+            let wrapped = finalize_tool_output(state, session_id, output).await?;
+            Ok(Some((rpc_result(request.id.clone(), wrapped), None)))
         }
         "resources/list" => Ok(Some((
             rpc_result(request.id.clone(), resource_list(state, session_id).await?),
@@ -230,12 +229,17 @@ async fn handle_rpc(
         ))),
         "resources/read" => {
             let uri = required_string(&request.params, "uri")?;
-            let output = read_resource(state, &uri).await?;
+            let output = read_resource(state, session_id, &uri).await?;
             Ok(Some((rpc_result(request.id.clone(), output), None)))
         }
         "resources/subscribe" => {
             let uri = required_string(&request.params, "uri")?;
             validate_subscribable_resource(&uri)?;
+            if let Some((_, identity)) = parse_inbox_uri(&uri)? {
+                authorize_resource_identity(state, session_id, &identity).await?;
+            } else if let Some((_, _, identity)) = parse_message_uri(&uri)? {
+                authorize_resource_identity(state, session_id, &identity).await?;
+            }
             let id = require_session_id(session_id)?;
             let mut sessions = state.mcp.sessions.lock().await;
             let session = sessions
@@ -277,7 +281,7 @@ async fn call_tool(
             let session = state
                 .store
                 .start(StartParticipant {
-                    identity: None,
+                    identity: optional_string(&args, "identity"),
                     role: role.clone(),
                 })
                 .await?;
@@ -334,8 +338,54 @@ async fn call_tool(
             notify_matching_message_resources(state, &project, &mail_id).await;
             Ok(json!({ "marked_read": mail_id }))
         }
+        "agent_mail_drain" => {
+            let (identity, _) = session_participant(state, session_id).await?;
+            let project = required_string(&args, "project")?;
+            let inbox = state.store.drain(&project, &identity).await?;
+            notify_resource(state, &inbox_uri(&project, &identity)).await;
+            notify_matching_inboxes(state, &project).await;
+            json_value(inbox)
+        }
         _ => Err(AppError::BadRequest(format!("unknown tool: {name}"))),
     }
+}
+
+async fn finalize_tool_output(
+    state: &Arc<AppState>,
+    session_id: Option<&str>,
+    mut output: Value,
+) -> Result<Value> {
+    if let Ok((identity, role)) = session_participant(state, session_id).await
+        && let Some(obj) = output.as_object_mut()
+    {
+        match state.store.unread_summary(&identity, &role).await {
+            Ok(rows) => {
+                obj.insert("agent_mail".into(), unread_badge(&rows));
+            }
+            Err(err) => {
+                tracing::warn!(?err, "unread_summary failed; skipping mail badge");
+            }
+        }
+    }
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": json_text(&output)?
+        }]
+    }))
+}
+
+fn unread_badge(rows: &[(String, i64)]) -> Value {
+    let unread_total: i64 = rows.iter().map(|(_, count)| *count).sum();
+    let by_project = rows
+        .iter()
+        .map(|(alias, count)| (alias.clone(), json!(count)))
+        .collect::<serde_json::Map<String, Value>>();
+    json!({
+        "unread_total": unread_total,
+        "by_project": by_project,
+        "hint": "call agent_mail_drain {project} to read and acknowledge"
+    })
 }
 
 async fn resource_list(state: &Arc<AppState>, session_id: Option<&str>) -> Result<Value> {
@@ -358,12 +408,18 @@ async fn resource_list(state: &Arc<AppState>, session_id: Option<&str>) -> Resul
     Ok(json!({ "resources": resources }))
 }
 
-async fn read_resource(state: &Arc<AppState>, uri: &str) -> Result<Value> {
+async fn read_resource(
+    state: &Arc<AppState>,
+    session_id: Option<&str>,
+    uri: &str,
+) -> Result<Value> {
     let value = if uri == "agent-mail://projects" {
         json!({ "projects": state.store.projects().await? })
     } else if let Some((project, identity)) = parse_inbox_uri(uri)? {
+        authorize_resource_identity(state, session_id, &identity).await?;
         json_value(state.store.inbox(&project, &identity).await?)?
     } else if let Some((project, mail_id, identity)) = parse_message_uri(uri)? {
+        authorize_resource_identity(state, session_id, &identity).await?;
         json_value(state.store.message(&project, &mail_id, &identity).await?)?
     } else {
         return Err(AppError::NotFound(format!("unknown resource URI {uri:?}")));
@@ -377,14 +433,30 @@ async fn read_resource(state: &Arc<AppState>, uri: &str) -> Result<Value> {
     }))
 }
 
+async fn authorize_resource_identity(
+    state: &Arc<AppState>,
+    session_id: Option<&str>,
+    identity: &str,
+) -> Result<()> {
+    let (session_identity, _) = session_participant(state, session_id).await?;
+    if session_identity == identity {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
 fn tool_list() -> Value {
     json!([
         {
             "name": "agent_mail_start",
-            "description": "Start this MCP session as an Agent Mail participant with the given role. The generated identity is bound to this MCP session.",
+            "description": "Start this MCP session as an Agent Mail participant with the given role. The identity handle is durable and resumable across reconnects: pass the same identity to resume the same mailbox; omit it to be assigned a fresh one.",
             "inputSchema": {
                 "type": "object",
-                "properties": { "role": { "type": "string" } },
+                "properties": {
+                    "role": { "type": "string" },
+                    "identity": { "type": "string" }
+                },
                 "required": ["role"],
                 "additionalProperties": false
             }
@@ -427,6 +499,18 @@ fn tool_list() -> Value {
                     "mail_id": { "type": "string" }
                 },
                 "required": ["project", "mail_id"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "agent_mail_drain",
+            "description": "Read and acknowledge mail for this MCP session identity in one call: returns the unread message bodies for the project AND marks them read. Call this at task checkpoints to consume waiting mail.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "project": { "type": "string" }
+                },
+                "required": ["project"],
                 "additionalProperties": false
             }
         }
@@ -506,12 +590,13 @@ async fn notify_resource(state: &Arc<AppState>, uri: &str) {
         "method": "notifications/resources/updated",
         "params": { "uri": uri }
     });
-    let sessions = state.mcp.sessions.lock().await;
-    for session in sessions.values() {
+    let mut sessions = state.mcp.sessions.lock().await;
+    for session in sessions.values_mut() {
         if (session.subscriptions.contains(uri) || uri == "agent-mail://projects")
             && let Some(stream) = &session.stream
+            && stream.send(notification.clone()).is_err()
         {
-            let _ = stream.send(notification.clone());
+            session.stream = None;
         }
     }
 }
@@ -521,10 +606,12 @@ async fn notify_list_changed(state: &Arc<AppState>) {
         "jsonrpc": "2.0",
         "method": "notifications/resources/list_changed"
     });
-    let sessions = state.mcp.sessions.lock().await;
-    for session in sessions.values() {
-        if let Some(stream) = &session.stream {
-            let _ = stream.send(notification.clone());
+    let mut sessions = state.mcp.sessions.lock().await;
+    for session in sessions.values_mut() {
+        if let Some(stream) = &session.stream
+            && stream.send(notification.clone()).is_err()
+        {
+            session.stream = None;
         }
     }
 }
@@ -663,7 +750,7 @@ fn rpc_error(id: Option<Value>, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
 }
 
-fn json_rpc_http(_id: Option<Value>, body: Value) -> Response {
+fn json_rpc_http(body: Value) -> Response {
     (StatusCode::OK, Json(body)).into_response()
 }
 
@@ -767,7 +854,10 @@ fn validate_session_protocol(session: &McpSession, headers: &HeaderMap) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_component, encode_component, parse_inbox_uri, parse_message_uri};
+    use super::{
+        decode_component, encode_component, parse_inbox_uri, parse_message_uri, unread_badge,
+    };
+    use serde_json::json;
 
     #[test]
     fn uri_component_round_trips_reserved_bytes() {
@@ -813,5 +903,27 @@ mod tests {
     fn uri_component_rejects_invalid_percent_encoding() {
         assert!(decode_component("%").is_err());
         assert!(decode_component("%xy").is_err());
+    }
+
+    #[test]
+    fn unread_badge_sums_total_and_maps_by_project() {
+        let rows = vec![("alpha".to_string(), 2_i64), ("beta".to_string(), 3_i64)];
+        let badge = unread_badge(&rows);
+
+        assert_eq!(badge["unread_total"], json!(5));
+        assert_eq!(badge["by_project"]["alpha"], json!(2));
+        assert_eq!(badge["by_project"]["beta"], json!(3));
+        assert_eq!(
+            badge["hint"],
+            json!("call agent_mail_drain {project} to read and acknowledge")
+        );
+    }
+
+    #[test]
+    fn unread_badge_handles_empty_rows() {
+        let badge = unread_badge(&[]);
+
+        assert_eq!(badge["unread_total"], json!(0));
+        assert_eq!(badge["by_project"], json!({}));
     }
 }

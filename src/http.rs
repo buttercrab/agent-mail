@@ -29,7 +29,12 @@ pub struct AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/mcp", get(crate::mcp::mcp_get).post(crate::mcp::mcp_post))
+        .route(
+            "/mcp",
+            get(crate::mcp::mcp_get)
+                .post(crate::mcp::mcp_post)
+                .delete(crate::mcp::mcp_delete),
+        )
         .route("/v1/participants/start", post(start_participant))
         .route("/v1/participants", get(list_participants))
         .route("/v1/projects", get(list_projects).post(add_project))

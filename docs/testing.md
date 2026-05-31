@@ -6,11 +6,11 @@ Agent Mail does not use fake green checks. A validation command must exercise th
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 make test
 ```
 
-`make test` currently runs `cargo test`. At initial import, the Rust unit test count was zero, so unit tests should not be treated as the only behavioral coverage.
+`make test` runs `cargo test --workspace`. At initial import, the Rust unit test count was zero, so unit tests should not be treated as the only behavioral coverage.
 
 ## Real PostgreSQL Smoke Tests
 
@@ -36,6 +36,16 @@ The MCP smoke parses JSON-RPC and SSE payloads. It verifies:
 - resource subscription updates
 - inbox and message resource reads
 - explicit mark-read behavior
+
+## Notification Adapters
+
+Run the adapter smoke against a real deployed Agent Mail endpoint:
+
+```bash
+AGENT_MAIL_URL=https://agent-mail.cc AGENT_MAIL_TOKEN=... make notify-smoke
+```
+
+This is a real test. It creates participants and a project, starts the Codex wait adapter, sends real mail through the HTTP API, and asserts the adapter re-reads unread inbox state after the MCP subscription update. It also verifies the Claude channel event renderer emits the documented `notifications/claude/channel` shape.
 
 ## Deployed Edge Smoke Tests
 
