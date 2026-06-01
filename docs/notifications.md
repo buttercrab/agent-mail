@@ -40,6 +40,7 @@ The Codex adapter therefore provides an explicit wait/poll surface:
 cargo run -p agent-mail-notify -- codex-wait \
   --project my-project \
   --identity worker-001 \
+  --role worker \
   --timeout-seconds 30
 ```
 
@@ -67,7 +68,7 @@ Claude Code wraps that notification's `content` into a `<channel source="agent-m
 Launch the server with:
 
 ```bash
-agent-mail-notify claude-channel-serve --project my-project --identity worker-001
+agent-mail-notify claude-channel-serve --project my-project --identity worker-001 --role worker
 ```
 
 It reads the inbox over the shared streaming watcher (auto-reconnect with backoff, durable identity, high-water-mark dedup so each unread batch is announced at most once) and never returns on a single event.
@@ -79,7 +80,7 @@ Register it so Claude Code spawns it (`.mcp.json` / `~/.claude.json` `mcpServers
   "mcpServers": {
     "agent-mail": {
       "command": "agent-mail-notify",
-      "args": ["claude-channel-serve", "--project", "my-project", "--identity", "worker-001"],
+      "args": ["claude-channel-serve", "--project", "my-project", "--identity", "worker-001", "--role", "worker"],
       "env": {
         "AGENT_MAIL_URL": "https://agent-mail.cc",
         "AGENT_MAIL_TOKEN": "..."

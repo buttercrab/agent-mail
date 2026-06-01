@@ -28,6 +28,7 @@ pub struct AgentMailClient {
 pub struct WatchTarget {
     pub project: String,
     pub identity: String,
+    pub role: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -106,26 +107,28 @@ impl AgentMailClient {
         timeout: Duration,
     ) -> Result<AgentMailEvent> {
         let session_id = self.initialize().await?;
-        self.initialized(&session_id).await?;
+        let outcome: Result<AgentMailEvent> = async {
+            self.initialized(&session_id).await?;
+            self.start(&session_id, target).await?;
 
-        let inbox_uri = target.inbox_uri();
-        self.subscribe(&session_id, &inbox_uri).await?;
+            let inbox_uri = target.inbox_uri();
+            self.subscribe(&session_id, &inbox_uri).await?;
 
-        let response = self.open_sse(&session_id).await?;
-        let mut sse = SseJsonStream::new(response);
-        if let Some(resource) = self.read_resource(&session_id, &inbox_uri).await?
-            && inbox_has_unread(&resource)
-        {
-            return Ok(resource_event(
-                AgentMailEventKind::InboxUpdated,
-                Some(inbox_uri),
-                Some(resource),
-            ));
-        }
+            let response = self.open_sse(&session_id).await?;
+            let mut sse = SseJsonStream::new(response);
+            if let Some(resource) = self.read_resource(&session_id, &inbox_uri).await?
+                && inbox_has_unread(&resource)
+            {
+                return Ok(resource_event(
+                    AgentMailEventKind::InboxUpdated,
+                    Some(inbox_uri),
+                    Some(resource),
+                ));
+            }
 
-        let mut poll_interval = time::interval(Duration::from_secs(1));
-        poll_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-        let event = time::timeout(timeout, async {
+            let mut poll_interval = time::interval(Duration::from_secs(1));
+            poll_interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
+            let event = time::timeout(timeout, async {
             loop {
                 tokio::select! {
                     payload = sse.next_json() => {
@@ -160,7 +163,11 @@ impl AgentMailClient {
         .await
         .map_err(|_| AgentMailClientError::Timeout)??;
 
-        Ok(event)
+            Ok(event)
+        }
+        .await;
+        let _ = self.delete_session(&session_id).await;
+        outcome
     }
 
     /// Stream newly-observed inbox events to `tx` until the receiver is dropped.
@@ -212,7 +219,9 @@ impl AgentMailClient {
         backoff: &mut Duration,
     ) -> Result<()> {
         let session_id = self.initialize().await?;
+        let outcome: Result<()> = async {
         self.initialized(&session_id).await?;
+        self.start(&session_id, target).await?;
 
         let inbox_uri = target.inbox_uri();
         self.subscribe(&session_id, &inbox_uri).await?;
@@ -257,6 +266,10 @@ impl AgentMailClient {
                 _ = tx.closed() => return Ok(()),
             }
         }
+        }
+        .await;
+        let _ = self.delete_session(&session_id).await;
+        outcome
     }
 
     /// Emit an inbox event when the resource carries unread mail strictly newer
@@ -351,6 +364,41 @@ impl AgentMailClient {
             .send()
             .await
             .context("send MCP initialized notification")?;
+        ensure_status(response).await.map(|_| ())
+    }
+
+    async fn start(&self, session_id: &str, target: &WatchTarget) -> Result<()> {
+        let response = self
+            .http
+            .post(self.mcp_url())
+            .headers(self.session_headers(session_id)?)
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "agent_mail_start",
+                    "arguments": {
+                        "role": target.role.clone(),
+                        "identity": target.identity.clone()
+                    }
+                }
+            }))
+            .send()
+            .await
+            .context("call agent_mail_start")?;
+        read_rpc_result(response).await?;
+        Ok(())
+    }
+
+    async fn delete_session(&self, session_id: &str) -> Result<()> {
+        let response = self
+            .http
+            .delete(self.mcp_url())
+            .headers(self.session_headers(session_id)?)
+            .send()
+            .await
+            .context("delete MCP session")?;
         ensure_status(response).await.map(|_| ())
     }
 
@@ -643,6 +691,7 @@ mod tests {
         let target = WatchTarget {
             project: "my/project".into(),
             identity: "worker/frontend".into(),
+            role: "frontend".into(),
         };
 
         assert_eq!(

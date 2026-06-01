@@ -41,6 +41,8 @@ struct WatchArgs {
     project: String,
     #[arg(long)]
     identity: String,
+    #[arg(long)]
+    role: String,
     #[arg(long, default_value_t = 30)]
     timeout_seconds: u64,
 }
@@ -257,6 +259,9 @@ fn validate_watch_args(target: &WatchTarget, timeout_seconds: u64) -> Result<()>
     if target.identity.trim().is_empty() {
         bail!("--identity must not be empty");
     }
+    if target.role.trim().is_empty() {
+        bail!("--role must not be empty");
+    }
     if timeout_seconds == 0 {
         bail!("--timeout-seconds must be greater than zero");
     }
@@ -268,6 +273,7 @@ impl WatchArgs {
         WatchTarget {
             project: self.project.clone(),
             identity: self.identity.clone(),
+            role: self.role.clone(),
         }
     }
 }
@@ -286,6 +292,7 @@ mod tests {
         let target = WatchTarget {
             project: "demo".into(),
             identity: "worker".into(),
+            role: "worker".into(),
         };
 
         assert!(validate_watch_args(&target, 0).is_err());
@@ -316,6 +323,7 @@ mod tests {
         let target = WatchTarget {
             project: "demo".into(),
             identity: "worker".into(),
+            role: "worker".into(),
         };
         let event = AgentMailEvent {
             id: "event-1".into(),

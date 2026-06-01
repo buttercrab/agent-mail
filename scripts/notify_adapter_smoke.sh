@@ -89,6 +89,7 @@ cargo run -q -p agent-mail-notify -- codex-wait \
   --url "$BASE_URL" \
   --project "$PROJECT" \
   --identity "$RECEIVER_IDENTITY" \
+  --role "$RECEIVER_ROLE" \
   --timeout-seconds 40 >"$TMPDIR/codex-event.json" 2>"$TMPDIR/codex-event.err" &
 WAIT_PID=$!
 
@@ -111,6 +112,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
       --url "$BASE_URL" \
       --project "$PROJECT" \
       --identity "$RECEIVER_IDENTITY" \
+      --role "$RECEIVER_ROLE" \
       2>"$TMPDIR/claude-channel.err" \
   | head -n 1 >"$TMPDIR/claude-channel.json"
 
