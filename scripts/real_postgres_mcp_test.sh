@@ -301,4 +301,31 @@ tool_call "$receiver_session" 9 agent_mail_mark_read "$(python3 -c 'import json,
 wait_for_sse_uri "$message_uri"
 mcp_post "$receiver_session" "$(python3 -c 'import json, sys; print(json.dumps({"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":sys.argv[1]}}))' "$inbox_uri")" | assert_json 'json.loads(data["result"]["contents"][0]["text"])["unread_count"] == 0'
 
+# --- agent_mail_drain self-bind ---------------------------------------------
+# A session that never called agent_mail_start can still drain by passing
+# identity (and role): the call binds the session, then reads, in one round-trip.
+selfbind_session="$(mcp_init)"
+mcp_post "$selfbind_session" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+# Register selfbind-001 by self-bind draining its (empty) inbox — no agent_mail_start.
+tool_call "$selfbind_session" 50 agent_mail_drain '{"project":"mcp-smoke","identity":"selfbind-001","role":"worker"}' \
+  | assert_json 'json.loads(data["result"]["content"][0]["text"])["unread_count"] == 0'
+# Sender posts to the now-existing identity.
+tool_call "$sender_session" 51 agent_mail_send '{"project":"mcp-smoke","to":"selfbind-001","subject":"Self bind","body":"bound on drain"}' >/dev/null
+# A BRAND-NEW session (again no agent_mail_start) drains and reads it in one call.
+selfbind_session2="$(mcp_init)"
+mcp_post "$selfbind_session2" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+tool_call "$selfbind_session2" 52 agent_mail_drain '{"project":"mcp-smoke","identity":"selfbind-001","role":"worker"}' \
+  | assert_json 'json.loads(data["result"]["content"][0]["text"])["unread_count"] == 1 and json.loads(data["result"]["content"][0]["text"])["messages"][0]["body"] == "bound on drain"'
+# It was marked read: a third self-bind drain sees zero.
+selfbind_session3="$(mcp_init)"
+mcp_post "$selfbind_session3" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+tool_call "$selfbind_session3" 53 agent_mail_drain '{"project":"mcp-smoke","identity":"selfbind-001","role":"worker"}' \
+  | assert_json 'json.loads(data["result"]["content"][0]["text"])["unread_count"] == 0'
+# Negative: draining without an identity on an unstarted session is rejected
+# with a JSON-RPC error (HTTP 200 envelope), not a silent empty read.
+unstarted_session="$(mcp_init)"
+mcp_post "$unstarted_session" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+tool_call "$unstarted_session" 54 agent_mail_drain '{"project":"mcp-smoke"}' \
+  | assert_json '"error" in data and "no identity bound" in data["error"]["message"]'
+
 echo "real postgres/mcp test passed"

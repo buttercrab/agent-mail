@@ -11,7 +11,13 @@ use tokio::{
     sync::{Mutex, mpsc},
 };
 
-const SERVER_NAME: &str = "agent-mail";
+/// The channel server's MCP identity. It MUST differ from the HTTP tools
+/// server's `serverInfo.name` (also "agent-mail"): Claude Code requires a unique
+/// `serverInfo.name` per session, so when both are loaded from one `--mcp-config`
+/// a collision makes one server fail to register ("1 MCP server failed"), which
+/// in turn breaks `--dangerously-load-development-channels server:agent-mail-channel`
+/// ("no MCP server configured with that name"). Keep this distinct.
+const CHANNEL_SERVER_NAME: &str = "agent-mail-channel";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_PROTOCOL: &str = "2025-11-25";
 
@@ -187,7 +193,7 @@ fn initialize_result(protocol_version: &str) -> Value {
             "tools": {},
             "resources": {}
         },
-        "serverInfo": { "name": SERVER_NAME, "version": SERVER_VERSION }
+        "serverInfo": { "name": CHANNEL_SERVER_NAME, "version": SERVER_VERSION }
     })
 }
 
@@ -280,7 +286,7 @@ impl WatchArgs {
 
 #[cfg(test)]
 mod tests {
-    use super::{SERVER_NAME, build_summary, initialize_result, validate_watch_args};
+    use super::{CHANNEL_SERVER_NAME, build_summary, initialize_result, validate_watch_args};
     use agent_mail_client::{
         AgentMailEvent, AgentMailEventKind, WatchTarget, claude_channel_notification,
     };
@@ -310,12 +316,29 @@ mod tests {
         );
         assert_eq!(
             result.pointer("/serverInfo/name").and_then(|v| v.as_str()),
-            Some(SERVER_NAME)
+            Some(CHANNEL_SERVER_NAME)
         );
         assert_eq!(
             result.pointer("/protocolVersion").and_then(|v| v.as_str()),
             Some("2025-11-25")
         );
+    }
+
+    /// Regression: the channel server's `serverInfo.name` must NOT collide with
+    /// the HTTP tools server's name ("agent-mail"). A collision makes Claude Code
+    /// fail to register one server and breaks the dev-channels flag resolution.
+    #[test]
+    fn channel_server_name_does_not_collide_with_http_server() {
+        assert_eq!(CHANNEL_SERVER_NAME, "agent-mail-channel");
+        assert_ne!(
+            CHANNEL_SERVER_NAME, "agent-mail",
+            "channel serverInfo.name must differ from the HTTP server's serverInfo.name"
+        );
+        let name = initialize_result("2025-11-25")
+            .pointer("/serverInfo/name")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        assert_eq!(name.as_deref(), Some("agent-mail-channel"));
     }
 
     #[test]

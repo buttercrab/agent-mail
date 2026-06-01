@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::{
-    domain::{SendMessage, StartParticipant},
+    domain::{SendMessage, Session, StartParticipant},
     error::{AppError, Result},
     http::{AppState, authorize},
     id,
@@ -184,7 +184,7 @@ async fn handle_rpc(
                             "title": "Agent Mail",
                             "version": env!("CARGO_PKG_VERSION")
                         },
-                        "instructions": "Your Agent Mail identity is durable: pass the same identity to agent_mail_start to resume the same mailbox across reconnects. Read AND acknowledge mail by calling agent_mail_drain at task checkpoints; it returns unread message bodies and marks them read in one call. Every tool result includes a compact agent_mail unread badge (unread_total plus per-project counts) so you always know when mail is waiting. Plain resource reads (resources/read) deliberately do NOT mark mail read; only agent_mail_drain (or agent_mail_mark_read) acknowledges it."
+                        "instructions": "Your Agent Mail identity is durable: pass the same identity to agent_mail_start to resume the same mailbox across reconnects. Read AND acknowledge mail by calling agent_mail_drain at task checkpoints; it returns unread message bodies and marks them read in one call. If you have not called agent_mail_start yet, pass your identity (and role) directly to agent_mail_drain and it binds the session first, so you can read waiting mail in a single call. Every tool result includes a compact agent_mail unread badge (unread_total plus per-project counts) so you always know when mail is waiting. Plain resource reads (resources/read) deliberately do NOT mark mail read; only agent_mail_drain (or agent_mail_mark_read) acknowledges it."
                     }),
                 ),
                 Some(id),
@@ -278,27 +278,8 @@ async fn call_tool(
     match name {
         "agent_mail_start" => {
             let role = required_string(&args, "role")?;
-            let session = state
-                .store
-                .start(StartParticipant {
-                    identity: optional_string(&args, "identity"),
-                    role: role.clone(),
-                })
-                .await?;
-            let id = require_session_id(session_id)?;
-            let mut sessions = state.mcp.sessions.lock().await;
-            let mcp_session = sessions
-                .get_mut(id)
-                .ok_or_else(|| AppError::NotFound("unknown MCP session".into()))?;
-            if let Some(existing_role) = &mcp_session.role
-                && existing_role != &session.role
-            {
-                return Err(AppError::Conflict(format!(
-                    "MCP session already started as role {existing_role:?}"
-                )));
-            }
-            mcp_session.identity = Some(session.identity.clone());
-            mcp_session.role = Some(session.role.clone());
+            let session =
+                bind_session(state, session_id, optional_string(&args, "identity"), role).await?;
             json_value(session)
         }
         "agent_mail_project_add" => {
@@ -339,8 +320,8 @@ async fn call_tool(
             Ok(json!({ "marked_read": mail_id }))
         }
         "agent_mail_drain" => {
-            let (identity, _) = session_participant(state, session_id).await?;
             let project = required_string(&args, "project")?;
+            let identity = ensure_session_identity(state, session_id, &args).await?;
             let inbox = state.store.drain(&project, &identity).await?;
             notify_resource(state, &inbox_uri(&project, &identity)).await;
             notify_matching_inboxes(state, &project).await;
@@ -384,7 +365,7 @@ fn unread_badge(rows: &[(String, i64)]) -> Value {
     json!({
         "unread_total": unread_total,
         "by_project": by_project,
-        "hint": "call agent_mail_drain {project} to read and acknowledge"
+        "hint": "call agent_mail_drain {project} to read and acknowledge (pass your identity and role to read in one call if you have not started)"
     })
 }
 
@@ -504,11 +485,13 @@ fn tool_list() -> Value {
         },
         {
             "name": "agent_mail_drain",
-            "description": "Read and acknowledge mail for this MCP session identity in one call: returns the unread message bodies for the project AND marks them read. Call this at task checkpoints to consume waiting mail.",
+            "description": "Read and acknowledge mail in one call: returns the unread message bodies for the project AND marks them read. If this session already called agent_mail_start it drains that identity; otherwise pass your durable identity (and role) and the session binds them first, so an agent nudged by the unread badge or a hook can read its mail in a single call. Call this at task checkpoints to consume waiting mail.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "project": { "type": "string" }
+                    "project": { "type": "string" },
+                    "identity": { "type": "string" },
+                    "role": { "type": "string" }
                 },
                 "required": ["project"],
                 "additionalProperties": false
@@ -551,6 +534,73 @@ async fn session_participant(
             "call agent_mail_start before using session-scoped tools".into(),
         )),
     }
+}
+
+/// Start (create-or-resume) a participant and bind it to this MCP session.
+/// Shared by agent_mail_start and the self-binding read path so the role-conflict
+/// guard and the session mutation stay identical on both routes.
+async fn bind_session(
+    state: &Arc<AppState>,
+    session_id: Option<&str>,
+    identity: Option<String>,
+    role: String,
+) -> Result<Session> {
+    let session = state
+        .store
+        .start(StartParticipant { identity, role })
+        .await?;
+    let id = require_session_id(session_id)?;
+    let mut sessions = state.mcp.sessions.lock().await;
+    let mcp_session = sessions
+        .get_mut(id)
+        .ok_or_else(|| AppError::NotFound("unknown MCP session".into()))?;
+    if let Some(existing_role) = &mcp_session.role
+        && existing_role != &session.role
+    {
+        return Err(AppError::Conflict(format!(
+            "MCP session already started as role {existing_role:?}"
+        )));
+    }
+    mcp_session.identity = Some(session.identity.clone());
+    mcp_session.role = Some(session.role.clone());
+    Ok(session)
+}
+
+/// Resolve the acting identity for a session-scoped read, self-binding when the
+/// session has not called agent_mail_start yet. This lets an agent that was just
+/// nudged by the unread badge or a SessionStart/UserPromptSubmit hook drain in a
+/// single call: pass `identity` (and `role`) and the session binds before
+/// reading. If the session is already started its bound identity wins, and a
+/// contradicting explicit identity is rejected so an agent cannot read another
+/// participant's mail by accident.
+async fn ensure_session_identity(
+    state: &Arc<AppState>,
+    session_id: Option<&str>,
+    args: &Value,
+) -> Result<String> {
+    if let Ok((identity, _)) = session_participant(state, session_id).await {
+        if let Some(requested) = optional_string(args, "identity")
+            && requested != identity
+        {
+            return Err(AppError::Conflict(format!(
+                "session is bound to identity {identity:?}; cannot act as {requested:?}"
+            )));
+        }
+        return Ok(identity);
+    }
+    let Some(identity) = optional_string(args, "identity") else {
+        return Err(AppError::BadRequest(
+            "no identity bound: pass identity and role to read in one call, or call agent_mail_start first".into(),
+        ));
+    };
+    let Some(role) = optional_string(args, "role") else {
+        return Err(AppError::BadRequest(format!(
+            "identity {identity:?} needs a role: pass role to bind and read in one call, or call agent_mail_start first"
+        )));
+    };
+    Ok(bind_session(state, session_id, Some(identity), role)
+        .await?
+        .identity)
 }
 
 async fn notify_matching_inboxes(state: &Arc<AppState>, project: &str) {
@@ -915,7 +965,9 @@ mod tests {
         assert_eq!(badge["by_project"]["beta"], json!(3));
         assert_eq!(
             badge["hint"],
-            json!("call agent_mail_drain {project} to read and acknowledge")
+            json!(
+                "call agent_mail_drain {project} to read and acknowledge (pass your identity and role to read in one call if you have not started)"
+            )
         );
     }
 

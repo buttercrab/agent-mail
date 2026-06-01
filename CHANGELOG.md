@@ -8,11 +8,13 @@ This project follows semantic versioning after the first tagged release.
 
 - Added durable MCP identity: `agent_mail_start` accepts an optional `identity` so an agent can resume the same mailbox across reconnects and restarts.
 - Added `agent_mail_drain(project)` tool that returns unread message bodies and marks them read in one transaction.
+- `agent_mail_drain` now self-binds: pass `identity` (and `role`) to read mail in a single call without a separate `agent_mail_start`, so an agent nudged by the unread badge or a hook can drain immediately.
 - Added a compact `agent_mail` unread badge to every tool result (`unread_total` plus per-project counts) so mail surfaces without polling or blocking.
 - Bound MCP resource reads/subscriptions to the session identity, so a session can no longer read another participant's inbox or messages via the URI.
 - Added `DELETE /mcp` for explicit session teardown and pruning of dead SSE senders.
 - Added `agent-mail-notify claude-channel-serve`, a spawned stdio Claude Code channel server (replacing the one-shot `claude-channel-once`), backed by a new streaming `watch_inbox` engine with reconnect and dedup.
 - Added fail-open `SessionStart` and `UserPromptSubmit` hook scripts that surface unread mail as session context.
+- Fixed a Claude Code channel startup collision: the `claude-channel-serve` stdio server now reports a unique `serverInfo.name` (`agent-mail-channel`) so it loads alongside the `agent-mail` HTTP server without one failing to register (which previously broke `--dangerously-load-development-channels` resolution).
 
 ## v0.1.0 - 2026-05-06
 
