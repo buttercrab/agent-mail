@@ -291,11 +291,14 @@ async fn call_tool(
             json_value(project)
         }
         "agent_mail_send" => {
-            let identity = ensure_session_identity(state, session_id, &args).await?;
+            // Validate the payload BEFORE self-binding so a malformed send never
+            // creates/updates a durable participant (which would reserve the
+            // identity/role) as a side effect of a call that then fails.
             let project = required_string(&args, "project")?;
             let to = required_string(&args, "to")?;
             let subject = required_string(&args, "subject")?;
             let body = required_string(&args, "body")?;
+            let identity = ensure_session_identity(state, session_id, &args).await?;
             let message = state
                 .store
                 .send(SendMessage {
@@ -311,9 +314,10 @@ async fn call_tool(
             json_value(message)
         }
         "agent_mail_mark_read" => {
-            let identity = ensure_session_identity(state, session_id, &args).await?;
+            // Validate the payload before self-binding (see agent_mail_send).
             let project = required_string(&args, "project")?;
             let mail_id = required_string(&args, "mail_id")?;
+            let identity = ensure_session_identity(state, session_id, &args).await?;
             state.store.mark_read(&project, &mail_id, &identity).await?;
             notify_resource(state, &inbox_uri(&project, &identity)).await;
             notify_matching_message_resources(state, &project, &mail_id).await;

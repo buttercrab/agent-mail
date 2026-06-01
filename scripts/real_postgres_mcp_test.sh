@@ -346,4 +346,13 @@ mcp_post "$drain_after_session" '{"jsonrpc":"2.0","method":"notifications/initia
 tool_call "$drain_after_session" 57 agent_mail_drain '{"project":"mcp-smoke","identity":"selfbind-001","role":"worker"}' \
   | assert_json 'json.loads(data["result"]["content"][0]["text"])["unread_count"] == 0'
 
+# A malformed self-bind send (missing subject/body) must fail BEFORE binding, so
+# its identity is never created — payload is validated ahead of the self-bind.
+malformed_session="$(mcp_init)"
+mcp_post "$malformed_session" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+tool_call "$malformed_session" 58 agent_mail_send '{"project":"mcp-smoke","to":"selfbind-001","identity":"selfbind-malformed","role":"planner"}' \
+  | assert_json '"error" in data'
+curl -fsS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$HTTP_PORT/v1/participants" \
+  | assert_json 'all(p["identity"] != "selfbind-malformed" for p in data["participants"])'
+
 echo "real postgres/mcp test passed"
