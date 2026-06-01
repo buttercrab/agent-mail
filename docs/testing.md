@@ -22,8 +22,9 @@ This runs:
 
 - `scripts/real_postgres_http_test.sh`
 - `scripts/real_postgres_mcp_test.sh`
+- `scripts/real_postgres_adapter_test.sh`
 
-The scripts start a real temporary PostgreSQL instance using local PostgreSQL binaries, start the Rust server, and exercise real HTTP/MCP behavior.
+The scripts start a real temporary PostgreSQL instance using local PostgreSQL binaries, start the Rust server, and exercise real HTTP/MCP behavior. The adapter script additionally drives the notify adapters and the GA hook scripts against the local server (it requires `jq`).
 
 The MCP smoke parses JSON-RPC and SSE payloads. It verifies:
 
@@ -46,6 +47,8 @@ AGENT_MAIL_URL=https://agent-mail.cc AGENT_MAIL_TOKEN=... make notify-smoke
 ```
 
 This is a real test. It creates participants and a project, starts the Codex wait adapter, sends real mail through the HTTP API, and asserts the adapter re-reads unread inbox state after the MCP subscription update. It also verifies the Claude channel event renderer emits the documented `notifications/claude/channel` shape.
+
+`make adapter-test` (also part of `make real-test`, so it runs in CI) exercises the same adapters plus the `SessionStart`/`UserPromptSubmit` hook scripts against a throwaway local PostgreSQL + server — no deployed endpoint or token needed. It guards the watcher/adapter/hook surfaces: the `codex-wait` path drives the watcher's `agent_mail_start`-then-subscribe sequence, so a server-side authz change that breaks the client crates fails CI instead of slipping through (which it previously did, because adapter smoke was not wired into CI).
 
 ## Deployed Edge Smoke Tests
 

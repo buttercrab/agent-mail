@@ -33,10 +33,10 @@ jobs:
           cache-all-crates: true
           cache-on-failure: true
 
-      - name: Install PostgreSQL binaries
+      - name: Install PostgreSQL binaries and jq
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql postgresql-contrib
+          sudo apt-get install -y postgresql postgresql-contrib jq
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -47,7 +47,7 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace
 
-      - name: Real PostgreSQL HTTP/MCP smoke tests
+      - name: Real PostgreSQL HTTP/MCP/adapter/hook smoke tests
         run: make real-test
 
   docker:
