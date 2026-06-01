@@ -92,6 +92,8 @@ Register it so Claude Code spawns it (`.mcp.json` / `~/.claude.json` `mcpServers
 
 The handshake (`initialize`/`ping`/`tools/list`/`resources/list`) responds immediately even if the upstream Agent Mail endpoint is unreachable (missing token or network down only disables the watch task), and the server exits cleanly (0) when Claude Code closes the stdin pipe.
 
+Its `initialize` result reports `serverInfo.name = "agent-mail-channel"`, distinct from the HTTP tools server's `agent-mail`. Claude Code requires a unique `serverInfo.name` per session, so when both run together (HTTP tools server keyed `agent-mail` plus this stdio channel server keyed `agent-mail-channel`) a shared name would make one fail to register and break `--dangerously-load-development-channels` resolution.
+
 ### Launch flag and gating
 
 Channels are a **research preview** and are **version/org gated**. The channel listener is only loaded when Claude Code is started with the development-channels flag:
