@@ -15,6 +15,7 @@ This project follows semantic versioning after the first tagged release.
 - Added `agent-mail-notify claude-channel-serve`, a spawned stdio Claude Code channel server (replacing the one-shot `claude-channel-once`), backed by a new streaming `watch_inbox` engine with reconnect and dedup.
 - Added fail-open `SessionStart` and `UserPromptSubmit` hook scripts that surface unread mail as session context.
 - Fixed a Claude Code channel startup collision: the `claude-channel-serve` stdio server now reports a unique `serverInfo.name` (`agent-mail-channel`) so it loads alongside the `agent-mail` HTTP server without one failing to register (which previously broke `--dangerously-load-development-channels` resolution).
+- Extended CI's real-PostgreSQL smoke suite (`scripts/real_postgres_adapter_test.sh`, part of `make real-test`) to exercise the notify adapters (`codex-wait`, `claude-channel-serve`) and the `SessionStart`/`UserPromptSubmit` hook scripts against a throwaway local server, so a server-side change that breaks the client crates or hooks now fails CI instead of slipping through.
 
 ## v0.1.0 - 2026-05-06
 
