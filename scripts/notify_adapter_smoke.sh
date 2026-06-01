@@ -9,6 +9,12 @@ RECEIVER_IDENTITY="notify-receiver-$$"
 RECEIVER_ROLE="notify-reviewer-$$"
 SENDER_IDENTITY="notify-sender-$$"
 SENDER_ROLE="notify-sender-role-$$"
+# Dedicated clean identity/role for the channel handshake. It must receive NO
+# mail so the channel server's first stdout line is deterministically the
+# initialize response, never a racing notifications/claude/channel emission
+# (serve_channel starts its watch task before reading the initialize request).
+CHANNEL_IDENTITY="notify-channel-$$"
+CHANNEL_ROLE="notify-channel-role-$$"
 
 cleanup() {
   local exit_status=$?
@@ -83,6 +89,7 @@ assert_json_file "$TMPDIR/health.json" 'data["ok"] is True'
 
 post_json /v1/participants/start "$(python3 -c 'import json, sys; print(json.dumps({"identity":sys.argv[1],"role":sys.argv[2]}))' "$RECEIVER_IDENTITY" "$RECEIVER_ROLE")" >/dev/null
 post_json /v1/participants/start "$(python3 -c 'import json, sys; print(json.dumps({"identity":sys.argv[1],"role":sys.argv[2]}))' "$SENDER_IDENTITY" "$SENDER_ROLE")" >/dev/null
+post_json /v1/participants/start "$(python3 -c 'import json, sys; print(json.dumps({"identity":sys.argv[1],"role":sys.argv[2]}))' "$CHANNEL_IDENTITY" "$CHANNEL_ROLE")" >/dev/null
 post_json /v1/projects "$(python3 -c 'import json, sys; print(json.dumps({"alias":sys.argv[1],"root":"/notify/adapter/smoke"}))' "$PROJECT")" >/dev/null
 
 cargo run -q -p agent-mail-notify -- codex-wait \
@@ -105,14 +112,16 @@ wait_for_file_json "$TMPDIR/codex-event.json" 'data["kind"] == "inbox_updated" a
 # claude-channel-serve is a persistent stdio MCP server, not a one-shot. Drive
 # it by feeding a single `initialize` request on its stdin and capturing the
 # first stdout line. It exits on stdin EOF, so closing the pipe ends it; a
-# bounded timeout guards against a hang. Assert the handshake declares the
-# claude/channel capability.
+# bounded timeout guards against a hang. Use CHANNEL_IDENTITY (which received no
+# mail) so the first stdout line is deterministically the initialize response,
+# not a racing notifications/claude/channel emission from the watch task. Assert
+# the handshake declares the claude/channel capability.
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}' \
   | cargo run -q -p agent-mail-notify -- claude-channel-serve \
       --url "$BASE_URL" \
       --project "$PROJECT" \
-      --identity "$RECEIVER_IDENTITY" \
-      --role "$RECEIVER_ROLE" \
+      --identity "$CHANNEL_IDENTITY" \
+      --role "$CHANNEL_ROLE" \
       2>"$TMPDIR/claude-channel.err" \
   | head -n 1 >"$TMPDIR/claude-channel.json"
 
