@@ -184,7 +184,7 @@ async fn handle_rpc(
                             "title": "Agent Mail",
                             "version": env!("CARGO_PKG_VERSION")
                         },
-                        "instructions": "Your Agent Mail identity is durable: pass the same identity to agent_mail_start to resume the same mailbox across reconnects. Read AND acknowledge mail by calling agent_mail_drain at task checkpoints; it returns unread message bodies and marks them read in one call. If you have not called agent_mail_start yet, pass your identity (and role) directly to agent_mail_drain and it binds the session first, so you can read waiting mail in a single call. Every tool result includes a compact agent_mail unread badge (unread_total plus per-project counts) so you always know when mail is waiting. Plain resource reads (resources/read) deliberately do NOT mark mail read; only agent_mail_drain (or agent_mail_mark_read) acknowledges it."
+                        "instructions": "Your Agent Mail identity is durable: pass the same identity to agent_mail_start to resume the same mailbox across reconnects. Read AND acknowledge mail by calling agent_mail_drain at task checkpoints; it returns unread message bodies and marks them read in one call. If you have not called agent_mail_start yet, pass your identity (and role) directly to any session-scoped tool (agent_mail_drain, agent_mail_send, agent_mail_mark_read) and it binds the session first, so you can read or send in a single call. Every tool result includes a compact agent_mail unread badge (unread_total plus per-project counts) so you always know when mail is waiting. Plain resource reads (resources/read) deliberately do NOT mark mail read; only agent_mail_drain (or agent_mail_mark_read) acknowledges it."
                     }),
                 ),
                 Some(id),
@@ -291,7 +291,7 @@ async fn call_tool(
             json_value(project)
         }
         "agent_mail_send" => {
-            let (identity, _) = session_participant(state, session_id).await?;
+            let identity = ensure_session_identity(state, session_id, &args).await?;
             let project = required_string(&args, "project")?;
             let to = required_string(&args, "to")?;
             let subject = required_string(&args, "subject")?;
@@ -311,7 +311,7 @@ async fn call_tool(
             json_value(message)
         }
         "agent_mail_mark_read" => {
-            let (identity, _) = session_participant(state, session_id).await?;
+            let identity = ensure_session_identity(state, session_id, &args).await?;
             let project = required_string(&args, "project")?;
             let mail_id = required_string(&args, "mail_id")?;
             state.store.mark_read(&project, &mail_id, &identity).await?;
@@ -457,14 +457,16 @@ fn tool_list() -> Value {
         },
         {
             "name": "agent_mail_send",
-            "description": "Send mail from this MCP session identity. Recipient is inferred as identity, role, or all-agents broadcast.",
+            "description": "Send mail from this MCP session identity (the sender). Recipient `to` is inferred as identity, role, or all-agents broadcast. If the session has not called agent_mail_start, pass your own `identity` (and `role`) to bind the session and send in one call.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "project": { "type": "string" },
                     "to": { "type": "string" },
                     "subject": { "type": "string" },
-                    "body": { "type": "string" }
+                    "body": { "type": "string" },
+                    "identity": { "type": "string" },
+                    "role": { "type": "string" }
                 },
                 "required": ["project", "to", "subject", "body"],
                 "additionalProperties": false
@@ -472,12 +474,14 @@ fn tool_list() -> Value {
         },
         {
             "name": "agent_mail_mark_read",
-            "description": "Mark delivered mail read for this MCP session identity.",
+            "description": "Mark delivered mail read for this MCP session identity. If the session has not called agent_mail_start, pass your `identity` (and `role`) to bind the session and acknowledge in one call.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "project": { "type": "string" },
-                    "mail_id": { "type": "string" }
+                    "mail_id": { "type": "string" },
+                    "identity": { "type": "string" },
+                    "role": { "type": "string" }
                 },
                 "required": ["project", "mail_id"],
                 "additionalProperties": false
