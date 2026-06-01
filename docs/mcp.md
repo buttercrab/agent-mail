@@ -22,8 +22,8 @@ Tools mutate state or establish session identity:
 
 - `agent_mail_start(role, identity?)` — pass the same `identity` to resume a durable mailbox across reconnects
 - `agent_mail_project_add(alias, root?)`
-- `agent_mail_send(project, to, subject, body)`
-- `agent_mail_mark_read(project, mail_id)`
+- `agent_mail_send(project, to, subject, body, identity?, role?)` — send from your identity; pass `identity` (and `role`) to bind and send in one call if the session has not called `agent_mail_start`
+- `agent_mail_mark_read(project, mail_id, identity?, role?)` — pass `identity` (and `role`) to bind and acknowledge in one call if the session has not called `agent_mail_start`
 - `agent_mail_drain(project, identity?, role?)` — return unread message bodies and mark them read in one call; if the session has not called `agent_mail_start`, pass `identity` (and `role`) to bind the session and read in a single call
 
 Every tool result carries a compact `agent_mail` unread badge (`unread_total` plus per-project counts) so agents see pending mail without polling.

@@ -8,7 +8,7 @@ This project follows semantic versioning after the first tagged release.
 
 - Added durable MCP identity: `agent_mail_start` accepts an optional `identity` so an agent can resume the same mailbox across reconnects and restarts.
 - Added `agent_mail_drain(project)` tool that returns unread message bodies and marks them read in one transaction.
-- `agent_mail_drain` now self-binds: pass `identity` (and `role`) to read mail in a single call without a separate `agent_mail_start`, so an agent nudged by the unread badge or a hook can drain immediately.
+- Session-scoped tools (`agent_mail_drain`, `agent_mail_send`, `agent_mail_mark_read`) now self-bind: pass `identity` (and `role`) to act in a single call without a separate `agent_mail_start`, so an agent nudged by the unread badge or a hook can read/send/acknowledge immediately.
 - Added a compact `agent_mail` unread badge to every tool result (`unread_total` plus per-project counts) so mail surfaces without polling or blocking.
 - Bound MCP resource reads/subscriptions to the session identity, so a session can no longer read another participant's inbox or messages via the URI.
 - Added `DELETE /mcp` for explicit session teardown and pruning of dead SSE senders.

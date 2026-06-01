@@ -328,4 +328,31 @@ mcp_post "$unstarted_session" '{"jsonrpc":"2.0","method":"notifications/initiali
 tool_call "$unstarted_session" 54 agent_mail_drain '{"project":"mcp-smoke"}' \
   | assert_json '"error" in data and "no identity bound" in data["error"]["message"]'
 
+# --- agent_mail_send / agent_mail_mark_read self-bind -----------------------
+# A fresh session SENDS without agent_mail_start by passing its own identity+role.
+send_sb_session="$(mcp_init)"
+mcp_post "$send_sb_session" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+send_sb="$(tool_call "$send_sb_session" 55 agent_mail_send '{"project":"mcp-smoke","to":"selfbind-001","subject":"Send self bind","body":"sent without start","identity":"selfbind-sender","role":"planner"}')"
+sb_mail_id="$(printf '%s' "$send_sb" | python3 -c 'import json, sys; print(json.loads(json.load(sys.stdin)["result"]["content"][0]["text"])["id"])')"
+[[ -n "$sb_mail_id" ]]
+# A fresh session MARKS IT READ without agent_mail_start by self-binding as the recipient.
+mark_sb_session="$(mcp_init)"
+mcp_post "$mark_sb_session" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+tool_call "$mark_sb_session" 56 agent_mail_mark_read "$(python3 -c 'import json, sys; print(json.dumps({"project":"mcp-smoke","mail_id":sys.argv[1],"identity":"selfbind-001","role":"worker"}))' "$sb_mail_id")" \
+  | assert_json 'json.loads(data["result"]["content"][0]["text"])["marked_read"] == "'"$sb_mail_id"'"'
+# Confirm acknowledged: a self-bind drain now sees zero unread.
+drain_after_session="$(mcp_init)"
+mcp_post "$drain_after_session" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+tool_call "$drain_after_session" 57 agent_mail_drain '{"project":"mcp-smoke","identity":"selfbind-001","role":"worker"}' \
+  | assert_json 'json.loads(data["result"]["content"][0]["text"])["unread_count"] == 0'
+
+# A malformed self-bind send (missing subject/body) must fail BEFORE binding, so
+# its identity is never created — payload is validated ahead of the self-bind.
+malformed_session="$(mcp_init)"
+mcp_post "$malformed_session" '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+tool_call "$malformed_session" 58 agent_mail_send '{"project":"mcp-smoke","to":"selfbind-001","identity":"selfbind-malformed","role":"planner"}' \
+  | assert_json '"error" in data'
+curl -fsS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$HTTP_PORT/v1/participants" \
+  | assert_json 'all(p["identity"] != "selfbind-malformed" for p in data["participants"])'
+
 echo "real postgres/mcp test passed"
