@@ -5,7 +5,10 @@ Agent Mail exposes MCP over Streamable HTTP at:
 ```text
 POST /mcp
 GET /mcp
+DELETE /mcp
 ```
+
+`DELETE /mcp` terminates the MCP session identified by the `Mcp-Session-Id` header.
 
 All MCP requests require:
 
@@ -17,10 +20,13 @@ Authorization: Bearer $AGENT_MAIL_TOKEN
 
 Tools mutate state or establish session identity:
 
-- `agent_mail_start(role)`
+- `agent_mail_start(role, identity?)` — pass the same `identity` to resume a durable mailbox across reconnects
 - `agent_mail_project_add(alias, root?)`
 - `agent_mail_send(project, to, subject, body)`
 - `agent_mail_mark_read(project, mail_id)`
+- `agent_mail_drain(project)` — return unread message bodies and mark them read in one call
+
+Every tool result carries a compact `agent_mail` unread badge (`unread_total` plus per-project counts) so agents see pending mail without polling.
 
 ## Resources
 
@@ -30,7 +36,7 @@ Resources read state:
 - `agent-mail://projects/{alias}/inbox?identity={identity}`
 - `agent-mail://projects/{alias}/messages/{mail_id}?identity={identity}`
 
-Resource reads do not mark mail read.
+Resource reads do not mark mail read; use `agent_mail_drain` (or `agent_mail_mark_read`) to acknowledge.
 
 ## Subscriptions
 

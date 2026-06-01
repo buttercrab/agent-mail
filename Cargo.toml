@@ -2,6 +2,21 @@
 name = "agent-mail-server"
 version = "0.1.0"
 edition = "2024"
+description = "Rust/PostgreSQL Agent Mail service with HTTP and MCP interfaces"
+license = "MIT"
+repository = "https://github.com/buttercrab/agent-mail"
+
+[workspace]
+members = [
+    ".",
+    "crates/agent-mail-client",
+    "crates/agent-mail-notify",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/buttercrab/agent-mail"
 

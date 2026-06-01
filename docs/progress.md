@@ -8,6 +8,40 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 
 ## Log
 
+### 2026-05-06 - Notification adapter track started
+
+- Done:
+  - Confirmed the deployed server already supports the required MCP notification primitives: `resources/subscribe`, `GET /mcp` SSE, and `notifications/resources/updated`.
+  - Decided to keep the Agent Mail server protocol-clean and add Codex/Claude notification behavior as client adapters.
+  - Added `docs/notifications.md` as the durable design record for Codex wait/poll support and Claude Code channel bridging.
+- Evidence:
+  - Existing MCP implementation advertises resource subscription capability and emits resource update notifications from `src/mcp.rs`.
+  - Existing deployed smoke scripts already validate real SSE notification delivery against a public endpoint.
+- Risk:
+  - Codex does not currently expose native async MCP subscription callbacks to the agent loop, so Codex support must be explicit wait/poll unless that runtime changes.
+  - Claude Code channel behavior is client-specific and must stay outside the core server.
+- Next:
+  - Add a shared MCP watcher client.
+  - Add a Codex-compatible wait command and a Claude channel event renderer.
+  - Prove both through real adapter smoke tests.
+
+### 2026-05-06 - Notification adapter implementation
+
+- Done:
+  - Added a workspace client crate, `agent-mail-client`, for remote MCP initialize, subscribe, SSE watching, and resource re-read behavior.
+  - Made the watcher treat SSE as an invalidation hint and poll the inbox resource while waiting, so transient notification loss does not hide already delivered unread mail.
+  - Added `agent-mail-notify` with:
+    - `codex-wait` for Codex-compatible explicit wait/poll behavior.
+    - `claude-channel-once` for rendering Agent Mail updates as Claude Code channel notifications.
+  - Added `scripts/notify_adapter_smoke.sh` and `make notify-smoke`.
+- Evidence:
+  - `cargo check --workspace` passed after adding the crates.
+- Risk:
+  - The current watcher is one-shot. Long-running daemon behavior still needs reconnect/backoff before it should be called production-grade background notification delivery.
+  - Claude Code channel installation is not yet packaged as a plugin; the event schema is implemented, but full Claude plugin packaging remains separate work.
+- Next:
+  - Run formatting, clippy, tests, and real deployed adapter smoke.
+
 ### 2026-05-06 - Repository inspection
 
 - Done:
@@ -578,3 +612,19 @@ Set up this repository as a strict, production-grade OSS Rust/MCP service with r
 - Next:
   - Merge PR #22 through the protected branch flow.
   - Re-check main CI and staging after merge.
+
+### 2026-06-01 - Durable identity, non-blocking mail injection, and channel server
+
+- Done:
+  - Made MCP identity durable: `agent_mail_start` accepts an optional `identity` so an agent resumes the same mailbox across reconnects/restarts.
+  - Added `agent_mail_drain(project)`, which returns unread message bodies and marks them read in one transaction, plus a compact `agent_mail` unread badge on every tool result so mail surfaces without polling or blocking.
+  - Bound MCP resource reads/subscriptions to the session identity (a session can no longer read another participant's inbox via the URI), added `DELETE /mcp`, and pruned dead SSE senders.
+  - Rebuilt the Claude adapter: replaced the one-shot `claude-channel-once` with `claude-channel-serve`, a spawned stdio `claude/channel` MCP server, backed by a streaming `watch_inbox` engine with reconnect/backoff and high-water-mark dedup. Added fail-open `SessionStart`/`UserPromptSubmit` hook scripts.
+- Evidence:
+  - `cargo fmt --all -- --check`, `cargo build --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` all pass (16 tests).
+  - Stdio smoke: piping an `initialize` line into `claude-channel-serve` returns `capabilities.experimental["claude/channel"]={}` and exits on EOF.
+- Risk:
+  - The new SQL (`drain`, `unread_summary`, resource-identity authz) is verified by unit tests and review but is exercised against a real database only by CI `make real-test`.
+  - Channel delivery is research-preview-gated and only confirmable end-to-end inside a live Claude Code session.
+- Next:
+  - Land via PR through the protected branch flow and confirm CI real smoke tests pass.

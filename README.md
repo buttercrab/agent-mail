@@ -21,16 +21,19 @@ This repository is the service home. The Codex skills repository should only con
 
 Mutations are MCP tools:
 
-- `agent_mail_start(role)`
+- `agent_mail_start(role, identity?)` — pass the same `identity` to resume a durable mailbox across reconnects
 - `agent_mail_project_add(alias, root?)`
 - `agent_mail_send(project, to, subject, body)`
 - `agent_mail_mark_read(project, mail_id)`
+- `agent_mail_drain(project)` — return unread message bodies and mark them read in one call
 
 Reads are MCP resources:
 
 - `agent-mail://projects`
 - `agent-mail://projects/{alias}/inbox?identity={identity}`
 - `agent-mail://projects/{alias}/messages/{mail_id}?identity={identity}`
+
+Resource reads do not mark mail read; use `agent_mail_drain` (or `agent_mail_mark_read`) to acknowledge. Every tool result also carries a compact `agent_mail` unread badge (`unread_total` plus per-project counts).
 
 Clients can subscribe to inbox/message resources and receive live `notifications/resources/updated` events over the SSE `GET /mcp` stream. Subscriptions are live hints, not a durable queue.
 
@@ -59,6 +62,12 @@ make real-test
 
 `make real-test` starts or uses a real PostgreSQL database and runs HTTP plus MCP smoke tests against a real server process.
 
+To verify the notification adapters against a real deployed endpoint:
+
+```bash
+AGENT_MAIL_TOKEN=... make notify-smoke
+```
+
 To verify the deployed production edge with real HTTPS/SSE:
 
 ```bash
@@ -82,6 +91,7 @@ agent-mail-server \
 - [Progress](docs/progress.md)
 - [MCP interface](docs/mcp.md)
 - [Testing](docs/testing.md)
+- [Notification adapters](docs/notifications.md)
 - [Deployment](docs/deployment.md)
 - [Lightsail deployment notes](docs/lightsail.md)
 - [Decision records](docs/decisions/)
