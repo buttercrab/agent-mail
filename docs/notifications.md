@@ -63,7 +63,7 @@ A Claude Code "channel" is a long-running stdio MCP server that Claude Code **sp
 notifications/claude/channel
 ```
 
-Claude Code wraps that notification's `content` into a `<channel source="agent-mail">…</channel>` tag the model reads on the next turn. The `source` attribute is set automatically from the configured server name, not from `meta`.
+Claude Code wraps that notification's `content` into a `<channel source="agent-mail-channel">…</channel>` tag the model reads on the next turn. The `source` attribute is set automatically from the `mcpServers` key the server is registered under, not from `meta`.
 
 Launch the server with:
 
@@ -78,7 +78,7 @@ Register it so Claude Code spawns it (`.mcp.json` / `~/.claude.json` `mcpServers
 ```json
 {
   "mcpServers": {
-    "agent-mail": {
+    "agent-mail-channel": {
       "command": "agent-mail-notify",
       "args": ["claude-channel-serve", "--project", "my-project", "--identity", "worker-001", "--role", "worker"],
       "env": {
@@ -92,14 +92,14 @@ Register it so Claude Code spawns it (`.mcp.json` / `~/.claude.json` `mcpServers
 
 The handshake (`initialize`/`ping`/`tools/list`/`resources/list`) responds immediately even if the upstream Agent Mail endpoint is unreachable (missing token or network down only disables the watch task), and the server exits cleanly (0) when Claude Code closes the stdin pipe.
 
-Its `initialize` result reports `serverInfo.name = "agent-mail-channel"`, distinct from the HTTP tools server's `agent-mail`. Claude Code requires a unique `serverInfo.name` per session, so when both run together (HTTP tools server keyed `agent-mail` plus this stdio channel server keyed `agent-mail-channel`) a shared name would make one fail to register and break `--dangerously-load-development-channels` resolution.
+Its `initialize` result reports `serverInfo.name = "agent-mail-channel"`. Claude Code requires a unique `serverInfo.name` per session, so this stays distinct from the HTTP tools server (which reports `agent-mail`): when both are registered together a shared name makes one fail to register and breaks the development-channels flag. Note the `server:<key>` flag and the `<channel source>` attribute key off the `mcpServers` key (`agent-mail-channel` above), which is independent of `serverInfo.name`; they are kept identical here to avoid confusion.
 
 ### Launch flag and gating
 
 Channels are a **research preview** and are **version/org gated**. The channel listener is only loaded when Claude Code is started with the development-channels flag:
 
 ```bash
-claude --dangerously-load-development-channels server:agent-mail
+claude --dangerously-load-development-channels server:agent-mail-channel
 ```
 
 That dev flag bypasses the Anthropic allowlist per entry (it prompts for confirmation). Once allowlisting is GA, an allowlisted entry is enabled via `--channels` instead. Additional gating to be aware of:
