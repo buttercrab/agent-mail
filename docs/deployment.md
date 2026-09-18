@@ -48,6 +48,8 @@ Required secrets:
 
 Production smoke targets `https://agent-mail.cc` and requires `/health` to report `environment=production`.
 
+Deploys are serialized per environment by a `concurrency` guard on the deploy job, not at the workflow level, and the deploy job is bounded by `timeout-minutes`. A workflow-level group would let one wedged run hold the group while GitHub cancels every later pending run, so a subsequent dispatch could be silently cancelled; the job-scoped, bounded guard limits that exposure to one bounded deploy. `scripts/check_deploy_concurrency.sh`, run in CI, fails if a workflow-level group appears or a deploy job loses its job-scoped guard or bounded timeout.
+
 ## Runtime Requirements
 
 The server host must provide:

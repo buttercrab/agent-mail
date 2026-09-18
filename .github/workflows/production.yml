@@ -13,15 +13,14 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-concurrency:
-  group: production
-  cancel-in-progress: false
-
 jobs:
   deploy-production:
     name: Deploy and verify production
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: production
+      cancel-in-progress: false
     environment: production
 
     steps:
