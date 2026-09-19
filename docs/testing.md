@@ -68,3 +68,17 @@ AGENT_MAIL_TOKEN=... PUBLIC_IP=... make public-mcp-smoke
 ```
 
 Deployed smoke tests intentionally create durable smoke projects/messages. There is no cleanup API yet.
+
+## Scheduled Public Health Check
+
+`scripts/public_health_check.sh` probes the unauthenticated `/health` endpoint on
+production and staging and fails when either edge is unreachable or reports the
+wrong environment. It needs no secrets.
+
+```bash
+make health-check
+```
+
+The `Public Uptime` workflow (`.github/workflows/uptime.yml`) runs the same probe
+hourly, so an origin outage that leaves Cloudflare returning 522 is detected
+without waiting for the next manual deploy.
