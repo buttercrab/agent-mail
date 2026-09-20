@@ -48,7 +48,7 @@ Required secrets:
 
 Production smoke targets `https://agent-mail.cc` and requires `/health` to report `environment=production`.
 
-Deploys are serialized per environment by a `concurrency` guard on the deploy job, not at the workflow level, and the deploy job is bounded by `timeout-minutes`. A workflow-level group would let one wedged run hold the group while GitHub cancels every later pending run, so a subsequent dispatch could be silently cancelled; the job-scoped, bounded guard limits that exposure to one bounded deploy. `scripts/check_deploy_concurrency.sh`, run in CI, fails if a workflow-level group appears or a deploy job loses its job-scoped guard or bounded timeout.
+Deploys are serialized per environment by a job-level concurrency guard with `cancel-in-progress: false` and `queue: max`. GitHub keeps up to 100 pending jobs without replacing an earlier pending job; arrivals beyond that limit are cancelled. Each deploy job has a 30-minute timeout. Queue order follows when jobs start waiting, not necessarily dispatch order. `scripts/check_deploy_concurrency.sh`, run in CI, verifies the group, queue policy, cancellation policy and positive timeout for each deploy job.
 
 ## Runtime Requirements
 
