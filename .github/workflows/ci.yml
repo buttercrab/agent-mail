@@ -22,6 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      - name: Check deploy workflow concurrency guards
+        run: |
+          ./scripts/check_deploy_concurrency.sh
+          python3 scripts/test_deploy_concurrency.py -v
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:

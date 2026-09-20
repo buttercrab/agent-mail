@@ -11,15 +11,15 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-concurrency:
-  group: staging
-  cancel-in-progress: false
-
 jobs:
   deploy-staging:
     name: Deploy and verify staging
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: staging
+      cancel-in-progress: false
+      queue: max
     environment: staging
 
     steps:
