@@ -1,4 +1,4 @@
-.PHONY: build fmt clippy test real-test mcp-test adapter-test notify-smoke public-mcp-smoke ci
+.PHONY: build fmt clippy test real-test mcp-test adapter-test notify-smoke public-mcp-smoke health-check ci
 
 build:
 	cargo build --workspace
@@ -28,5 +28,8 @@ notify-smoke:
 
 public-mcp-smoke:
 	./scripts/public_mcp_smoke.sh
+
+health-check:
+	./scripts/public_health_check.sh
 
 ci: fmt clippy test real-test

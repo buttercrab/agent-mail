@@ -1,0 +1,28 @@
+name: Public Uptime
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  public-health:
+    name: Probe public health endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: public-health
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Probe production and staging health
+        run: ./scripts/public_health_check.sh
